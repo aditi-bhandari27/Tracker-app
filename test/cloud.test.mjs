@@ -2,80 +2,35 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { readFileSync } from "node:fs";
-
-const context = vm.createContext({
-  location: { origin: "https://example.com", pathname: "/tracker/" },
-});
+const context = vm.createContext({});
 vm.runInContext(
   readFileSync(new URL("../public/cloud.js", import.meta.url), "utf8"),
   context,
 );
 const Cloud = context.TasklineCloud;
-
-test("sign-in uses GitHub OAuth without sending verification emails", async () => {
-  let request;
-  const cloud = new Cloud({
-    auth: {
-      signInWithOAuth: async (input) => {
-        request = input;
-        return {};
-      },
-    },
-  });
-  await cloud.signIn();
-  assert.equal(request.provider, "github");
-  assert.equal(request.options.redirectTo, "https://example.com/tracker/");
-});
-
-// In-memory service mirrors the database's owner-scoped read and atomic revision contract.
+const TOKEN = "a".repeat(64);
 function service() {
-  const rows = new Map();
+  let board = { tasks: [], revision: 0 };
   return {
-    client(owner) {
-      return {
-        auth: {
-          getUser: async () => ({
-            data: { user: owner ? { id: owner } : null },
-          }),
-        },
-        from() {
-          return {
-            select() {
-              return {
-                eq(key, value) {
-                  return {
-                    maybeSingle: async () => ({
-                      data:
-                        value === owner
-                          ? structuredClone(rows.get(owner) || null)
-                          : null,
-                    }),
-                  };
-                },
-              };
-            },
-          };
-        },
-        async rpc(name, args) {
-          if (!owner) return { error: { code: "42501" } };
-          const previous = rows.get(owner) || { tasks: [], revision: 0 };
-          if (previous.revision !== args.expected_revision)
-            return { error: { code: "40001" } };
-          const revision = previous.revision + 1;
-          rows.set(owner, { tasks: structuredClone(args.new_tasks), revision });
-          return { data: revision };
-        },
+    async rpc(name, args) {
+      if (args.link_token !== TOKEN)
+        return { error: { code: "42501", message: "Invalid private link" } };
+      if (name === "load_taskline_link")
+        return { data: structuredClone(board) };
+      if (args.expected_revision !== board.revision)
+        return { error: { code: "40001" } };
+      board = {
+        tasks: structuredClone(args.new_tasks),
+        revision: board.revision + 1,
       };
+      return { data: board.revision };
     },
   };
 }
-
-test("two computers using the same account load identical saved tasks", async () => {
+test("two computers with the same private link share edits without auth", async () => {
   const db = service(),
-    first = new Cloud(db.client("owner")),
-    second = new Cloud(db.client("owner"));
-  await first.session();
-  await second.session();
+    first = new Cloud(db, TOKEN),
+    second = new Cloud(db, TOKEN);
   const records = [{ id: "task-1", title: "Shared task", issues: [] }];
   await first.save(records);
   const loaded = await second.load();
@@ -87,38 +42,32 @@ test("two computers using the same account load identical saved tasks", async ()
     "Edited on second computer",
   );
 });
-
-test("stale saves are rejected without overwriting newer changes", async () => {
+test("missing, malformed and incorrect links cannot read or save", async () => {
+  const db = service();
+  for (const token of [undefined, "", "short", "b".repeat(64)]) {
+    const client = new Cloud(db, token);
+    await assert.rejects(() => client.load());
+    await assert.rejects(() => client.save([]));
+  }
+});
+test("stale saves preserve the newer board", async () => {
   const db = service(),
-    first = new Cloud(db.client("owner")),
-    stale = new Cloud(db.client("owner"));
-  await first.session();
-  await stale.session();
+    first = new Cloud(db, TOKEN),
+    stale = new Cloud(db, TOKEN);
   await first.save([{ id: "newer" }]);
   await assert.rejects(() => stale.save([{ id: "stale" }]), /another computer/);
   assert.equal((await first.load()).tasks[0].id, "newer");
   assert.equal(stale.revision, 0);
 });
-
-test("different accounts do not share records and signed-out saves fail", async () => {
-  const db = service(),
-    first = new Cloud(db.client("owner")),
-    other = new Cloud(db.client("other"));
-  await first.session();
-  await other.session();
-  await first.save([{ id: "private" }]);
-  assert.equal((await other.load()).tasks.length, 0);
-  const signedOut = new Cloud(db.client(null));
-  await assert.rejects(() => signedOut.save([]), /Sign in/);
-});
-
-test("network failures do not advance the acknowledged revision", async () => {
-  const cloud = new Cloud({
-    rpc: async () => {
-      throw Error("Offline");
+test("network failures do not advance acknowledged revision", async () => {
+  const cloud = new Cloud(
+    {
+      rpc: async () => {
+        throw Error("Offline");
+      },
     },
-  });
-  cloud.user = { id: "owner" };
+    TOKEN,
+  );
   cloud.revision = 4;
   await assert.rejects(() => cloud.save([]), /Offline/);
   assert.equal(cloud.revision, 4);

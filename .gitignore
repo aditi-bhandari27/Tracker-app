@@ -10,3 +10,5 @@ test-results/
 *backup*.json
 *recovery*.json
 *.log
+
+*private-link*.json

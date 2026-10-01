@@ -4,15 +4,13 @@ A dark-mode task tracker for **Agent Architect** and **AI+ Studio**. Each worksp
 
 **Public app:** https://aditi-bhandari27.github.io/Tracker-app/
 
-Live sync is enabled. Open this link on any computer and sign in with the same GitHub account to access the same tasks.
+Live sync uses a **private sync link**, with no GitHub login or email verification. Open the complete link on each computer, or use **Copy private link** in the app. Anyone who has that link can view and edit the board. The plain public URL does not grant access to tasks.
 
 ## Live sync
 
-See [Supabase setup](supabase/SETUP.md) to configure GitHub sign-in, private cloud storage, automatic updates, and server-side revision history. The client is included locally; no CDN is needed. The backend configuration is in `public/config.js` and uses only a public project URL and publishable key.
+See [Supabase setup](supabase/SETUP.md). The backend configuration in `public/config.js` contains only the public project URL and publishable key. The private link is never committed to GitHub, included in exports, or placed in page requests/referrers. The browser remembers it locally after a successful connection.
 
-Once connected, sign in on the browser that already has your tasks, then select **Sync existing tasks**. This copies them into your account without removing the local backup. Sign in with the same GitHub account elsewhere to see the list. Other accounts have separate data.
-
-Cloud saves are acknowledged by the server. Incoming changes arrive over Realtime with a 10-second fallback refresh. Conflicts preserve your draft instead of overwriting newer work. Offline changes are not marked as synced.
+Cloud saves are acknowledged by the server. Visible tabs check for updates every 3 seconds and when focused or reconnected. Incoming changes wait while a task form is open. Revision conflicts preserve the draft instead of overwriting newer work. Offline changes are not marked as synced. The last 20 server revisions remain available for recovery.
 
 ## Run locally
 
@@ -59,11 +57,11 @@ New tasks belong to the workspace and list selected when you create them. Status
 
 ## Your data and backups
 
-**With cloud sync configured, tasks are saved in your authenticated Supabase account.** GitHub contains only application code; no personal task records, standup data, or recovery backups are committed. With cloud configuration empty, the app uses local browser storage and a fresh browser starts empty.
+**With cloud sync configured, tasks are saved in Supabase and accessed through your private link.** GitHub contains only application code; no personal task records, standup data, or recovery backups are committed. With cloud configuration empty, the app uses local browser storage and a fresh browser starts empty.
 
 Use **Export backup** regularly and before clearing browser data or moving the app to another address. Use **Import backup** to restore your tasks. Import validates the file, shows a replacement confirmation, and saves a snapshot of the existing records before replacing them. It restores tasks across both workspaces. Never commit personal backup files to this public repository.
 
-The original prototype's `taskline.prototype.v1` storage key and JSON backup format remain compatible. Local records are preserved for migration. In local mode, a different port, browser, or hosted URL is a different storage location; import your exported backup there. In cloud mode, sign in with the same GitHub account instead.
+The original prototype's `taskline.prototype.v1` storage key and JSON backup format remain compatible. Local records are preserved for migration. In local mode, a different port, browser, or hosted URL is a different storage location; import your exported backup there. In cloud mode, open the same private sync link instead.
 
 Exports include current working records, exact saved records, backup history, and any open unsaved draft. Import restores `workingTasks` (or legacy `rawTasks`); unsaved drafts are retained in the file for manual recovery, not applied automatically. History is included as `rawHistory`; to restore an older snapshot, parse that field and import the desired snapshot's `raw` array as a JSON file.
 
@@ -80,4 +78,4 @@ scripts/build.mjs   Static distribution build
 test/               Node test runner checks with synthetic task data
 ```
 
-Local mode requires no external services. Cloud mode connects only to the configured Supabase project for authentication, database access, and Realtime updates. The vendored Supabase client is version 2.117.2; its MIT license is included in `public/vendor/`.
+Local mode requires no external services. Cloud mode connects only to the configured Supabase project for protected database reads and writes. The vendored Supabase client is version 2.117.2; its MIT license is included in `public/vendor/`.

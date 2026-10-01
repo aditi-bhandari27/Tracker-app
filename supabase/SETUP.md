@@ -1,19 +1,21 @@
-# Live sync setup
+# Private-link sync setup
 
-The public GitHub Pages app can use Supabase Auth and Postgres for private, account-based sync. Sign in with the same GitHub account on each computer. Different accounts have separate task lists; team invitations are not implemented.
+The app opens one shared board through a 256-bit private link, without a sign-in flow. Anyone with the complete link can view and edit. GitHub Pages hosts application code only.
 
-1. Create a Supabase project and run `schema.sql` in its SQL editor.
-2. In Authentication → URL Configuration, set the Site URL and allowed redirect URL to `https://aditi-bhandari27.github.io/Tracker-app/`. For local development, also allow the exact local URL in use.
-3. Register a GitHub OAuth application with the app's homepage URL and the Supabase callback URL `https://<project-ref>.supabase.co/auth/v1/callback`. In Authentication → Sign In / Providers → GitHub, enable the provider and enter its Client ID and Client Secret. The secret belongs only in Supabase's provider settings, never in this repository. Email links and SMTP are not used by the app.
-4. Put the project URL and **publishable** key in `public/config.js`. Never use the database password, secret key, or service-role key in the browser or repository.
-5. Publish `main` and `gh-pages` using the README commands.
-6. Sign in on the computer with your saved tasks. Select **Sync existing tasks** once to migrate the local records to the empty cloud account. The local copy is preserved. If tasks were saved on another address, use **Import backup** after signing in instead.
-7. Open the public link on a second computer and sign in with the same GitHub account. Confirm that tasks load, and that an edit on either computer reaches the other.
+1. Run `schema.sql`, then `private-links.sql` in Supabase's SQL editor. Existing boards and history are preserved.
+2. Create a cryptographically random 32-byte token, encoded as 64 lowercase hex characters, outside the repository. Compute SHA-256 of the UTF-8 token. Register **only its hash** in `taskline_links`, mapping it to an existing board's `owner_id`. Keep the raw token out of SQL snippets, GitHub, logs, and backups.
+3. Keep the project URL and publishable key in `public/config.js`. Never publish a service-role key.
+4. Open `https://<host>/<path>/#board=<token>` on each computer. The app remembers the link locally after a successful read. **Copy private link** copies the full URL.
+5. To revoke a link, set that row's `revoked_at` to `now()`. To rotate access, register a new random token hash for the same board and revoke the old hash. Keep at least one usable link until the replacement is verified.
 
-Changes are received through Supabase Realtime, with a 10-second refresh fallback while the tab is visible. While a task form is open, incoming updates wait so they cannot replace an unsaved draft. Save uses an atomic revision check: a stale computer cannot overwrite a newer revision. Close the form to load the latest state before retrying a conflicting edit. Export backup includes the unsaved draft for recovery.
+No Supabase Auth session, GitHub provider, SMTP, or email verification is used by this client. Existing auth-owned board rows are retained so the migration does not recreate or overwrite tasks. Do not delete the legacy owner user: the original schema's foreign keys cascade its board/history.
 
-The server retains the previous 20 revisions in `taskline_history`. Tables use row-level security for reads. Writes go through a narrowly scoped database function that uses the authenticated account ID, validates the revision, and saves history in the same transaction. Anonymous reads and writes are denied.
+## Access and save guarantees
 
-The application requires a connection to save cloud changes. It does not silently save them locally and claim they are synced. Configuration left empty keeps the original local mode until a database is ready.
+`taskline_links`, `taskline_boards`, and `taskline_history` are protected by RLS. Anonymous callers cannot read tables directly. Narrow `SECURITY DEFINER` RPCs hash and validate the supplied link token, map it to exactly one owner, and deny missing, invalid, or revoked links. No owner ID is accepted from the client. The functions have an empty search path.
 
-References: [Supabase GitHub sign-in](https://supabase.com/docs/guides/auth/social-login/auth-github), [Row-level security](https://supabase.com/docs/guides/database/postgres/row-level-security).
+Writes use the same owner lock and atomic revision check as the original authenticated RPC. Previous tasks are snapshotted in the same transaction; the latest 20 snapshots are retained. Stale saves fail rather than overwriting newer data. The browser polls every 3 seconds while visible and refreshes on focus/online. Open forms pause incoming changes to preserve drafts.
+
+The token appears only in the URL fragment (not sent as a page URL request) and in HTTPS RPC bodies to this Supabase project. Page referrers are disabled. Browser history and anyone to whom the link is forwarded can retain it; treat it like a password. **Export backup** excludes the link.
+
+With cloud configuration empty, the original browser-only mode remains available. The `taskline.prototype.v1` local records and JSON backup format remain compatible.

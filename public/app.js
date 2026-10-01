@@ -130,7 +130,7 @@ async function save() {
       $("storageError").classList.remove("visible");
       $("saveNote").textContent =
         "Saved to cloud · Available on your other computers";
-      syncMessage("Synced", cloud.user.email);
+      syncMessage("Synced", "Private link · No sign-in needed");
       return true;
     } catch (error) {
       $("storageError").textContent = error.message;
@@ -306,7 +306,7 @@ function render() {
   $("newTask").disabled = !canEdit();
   $("importBackup").disabled = cloudEnabled ? !canEdit() : saving;
   $("migrateTasks").disabled = saving || !cloudLoaded;
-  $("signOut").disabled = saving;
+  $("copySyncLink").disabled = !cloudLoaded;
   $("refreshCloud").disabled = saving;
 
   $("tabs").innerHTML = ["Current", "Backlog"]
@@ -735,7 +735,9 @@ function parseBackup(text) {
 
 async function importBackupText(text) {
   if (cloudEnabled && !canEdit())
-    throw Error("Sign in and load cloud tasks before importing.");
+    throw Error(
+      "Open your private link and load cloud tasks before importing.",
+    );
   const imported = parseBackup(text);
   if (
     !confirm(
@@ -789,18 +791,11 @@ window.addEventListener("storage", (event) => {
 });
 
 async function refreshCloud() {
-  if (!cloud?.user || saving || draft || loadingCloud) return;
+  if (!cloud?.token || saving || draft || loadingCloud) return;
   loadingCloud = true;
-  const account = cloud.user.id;
   try {
     const board = await cloud.load();
-    if (
-      cloud.user?.id !== account ||
-      saving ||
-      draft ||
-      board.revision < cloud.revision
-    )
-      return;
+    if (saving || draft || board.revision < cloud.revision) return;
     const changed = !cloudLoaded || board.revision !== cloud.revision;
     if (changed) {
       tasks = parseBackup(JSON.stringify(board.tasks));
@@ -810,11 +805,12 @@ async function refreshCloud() {
     cloudLoaded = true;
     loadSucceeded = true;
     $("migrateTasks").hidden = !(board.revision === 0 && migrationAvailable);
-    $("saveNote").textContent = "Cloud sync · Same account, every computer";
+    $("saveNote").textContent =
+      "Cloud sync · Same private link, every computer";
     $("storageError").classList.remove("visible");
     syncMessage(
       "Synced",
-      cloud.user.email +
+      "Private link · No sign-in needed" +
         " · Changes appear automatically on your other computers.",
     );
     render();
@@ -828,102 +824,80 @@ async function refreshCloud() {
   }
 }
 
-async function updateCloudAccount() {
-  try {
-    const previousAccount = cloud.user?.id;
-    const user = await cloud.session();
-    if (user?.id !== previousAccount || !user) {
-      // Session changes must never expose the previous account's records.
-      tasks = [];
-      cloudLoaded = false;
-      loadSucceeded = false;
-      cloud.revision = 0;
-      if (draft) {
-        $("taskDialog").close();
-        draft = null;
-      }
-    }
-    $("signInForm").hidden = Boolean(user);
-    $("signOut").hidden = !user;
-    $("refreshCloud").hidden = !user;
-    $("migrateTasks").hidden = true;
-    $("accountLabel").textContent = user
-      ? "Cloud workspace"
-      : "Sign in to sync";
-    if (!user) {
-      syncMessage(
-        "Sign in to sync your tasks",
-        "Continue with GitHub on every computer. No verification email is needed.",
-      );
-      await cloud.unsubscribe();
-      render();
-      return;
-    }
-    await refreshCloud();
-    await cloud.subscribe(() => refreshCloud());
-  } catch (error) {
-    syncMessage("Unable to sign in", error.message);
-  }
-}
-
+const LINK_KEY = "taskline.private-link.v1";
+let privateSyncLink = "";
 async function startCloud() {
+  // Also handle opening a link while the page is waiting for one.
+  window.addEventListener("hashchange", () => location.reload());
   migrationTasks = structuredClone(tasks);
   migrationAvailable = loadSucceeded && tasks.length > 0;
   tasks = [];
   loadSucceeded = false;
   $("syncPanel").hidden = false;
-  $("saveNote").textContent = "Cloud sync · Sign in to load your tasks";
+  $("saveNote").textContent = "Cloud sync · Connecting to your board";
+  $("accountLabel").textContent = "Private workspace";
   render();
   try {
+    const fragment = new URLSearchParams(location.hash.slice(1));
+    let token = fragment.has("board") ? fragment.get("board") : null;
+    if (!fragment.has("board")) {
+      try {
+        token = localStorage.getItem(LINK_KEY);
+      } catch {}
+    }
+    if (!/^[a-f0-9]{64}$/.test(token || "")) {
+      syncMessage(
+        "Open your private sync link",
+        "Use the complete link on each computer to access the same tasks. No login needed.",
+      );
+      $("saveNote").textContent = "Waiting for your private sync link";
+      return;
+    }
     if (!globalThis.supabase)
-      throw Error("The sign-in client could not load. Please refresh.");
+      throw Error("The sync client could not load. Please refresh.");
     const client = globalThis.supabase.createClient(
       cloudConfig.supabaseUrl,
       cloudConfig.supabasePublishableKey,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      },
     );
-    cloud = new TasklineCloud(client);
-    client.auth.onAuthStateChange((event) => {
-      if (event !== "INITIAL_SESSION" && event !== "TOKEN_REFRESHED")
-        setTimeout(() => updateCloudAccount(), 0);
-    });
-    await updateCloudAccount();
+    cloud = new TasklineCloud(client, token);
+    await refreshCloud();
+    if (cloudLoaded) {
+      try {
+        localStorage.setItem(LINK_KEY, token);
+      } catch {}
+    }
+    privateSyncLink = location.origin + location.pathname + "#board=" + token;
+    $("refreshCloud").hidden = false;
+    $("copySyncLink").hidden = false;
     setInterval(() => {
       if (!document.hidden) refreshCloud();
-    }, 10000);
+    }, 3000);
     window.addEventListener("focus", refreshCloud);
     window.addEventListener("online", refreshCloud);
   } catch (error) {
-    syncMessage("Sync setup needed", error.message);
+    syncMessage("Could not connect", error.message);
   }
 }
 
-$("signInForm").onsubmit = async (event) => {
-  event.preventDefault();
-  if (!cloud) return;
-  $("signInForm").inert = true;
+$("copySyncLink").onclick = async () => {
+  if (!cloudLoaded || !privateSyncLink) return;
   try {
-    await cloud.signIn();
-    syncMessage(
-      "Opening GitHub…",
-      "Sign in to GitHub to load your synced tasks.",
+    await navigator.clipboard.writeText(privateSyncLink);
+    notify(
+      "Private link copied. Open it on your other computer. Anyone with this link can edit.",
     );
-  } catch (error) {
-    syncMessage("Could not start GitHub sign-in", error.message);
-  } finally {
-    $("signInForm").inert = false;
-  }
-};
-$("signOut").onclick = async () => {
-  if (saving) return;
-  if (draft) {
-    closeEditor();
-    if (draft) return;
-  }
-  try {
-    await cloud.signOut();
-    await updateCloudAccount();
-  } catch (error) {
-    notify(error.message);
+  } catch {
+    prompt(
+      "Copy this private link. Anyone with it can view and edit your tasks.",
+      privateSyncLink,
+    );
   }
 };
 $("refreshCloud").onclick = () => {
@@ -937,7 +911,7 @@ $("migrateTasks").onclick = async () => {
   if (!canEdit() || !migrationAvailable || cloud.revision !== 0) return;
   if (
     !confirm(
-      `Sync the ${migrationTasks.length} tasks saved in this browser to your signed-in account? They will become available on your other computers.`,
+      `Sync the ${migrationTasks.length} tasks saved in this browser to this private board? They will become available on your other computers.`,
     )
   )
     return;
@@ -948,7 +922,7 @@ $("migrateTasks").onclick = async () => {
     $("migrateTasks").hidden = true;
     restoreView();
     render();
-    notify("Your existing tasks are now synced to your account.");
+    notify("Your existing tasks are now synced to your private board.");
   } else {
     tasks = previous;
     render();

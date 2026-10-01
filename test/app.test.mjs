@@ -59,6 +59,12 @@ function start(store = {}, cloudClient = null) {
     structuredClone,
     crypto: webcrypto,
     URL,
+    URLSearchParams,
+    location: {
+      origin: "https://example.com",
+      pathname: "/",
+      hash: cloudClient?.testToken ? "#board=" + cloudClient.testToken : "",
+    },
     document: {
       getElementById: element,
       querySelector: element,
@@ -236,43 +242,19 @@ function fakeCloudDatabase() {
     },
     client(owner) {
       return {
-        auth: {
-          getUser: async () => ({
-            data: {
-              user: owner ? { id: owner, email: "person@example.com" } : null,
-            },
-          }),
-          onAuthStateChange() {},
-        },
-        channel() {
-          return {
-            on() {
-              return this;
-            },
-            subscribe() {
-              return this;
-            },
-          };
-        },
-        async removeChannel() {},
-        from() {
-          return {
-            select() {
-              return {
-                eq() {
-                  return {
-                    maybeSingle: async () => ({
-                      data: structuredClone(rows.get(owner) || null),
-                    }),
-                  };
-                },
-              };
-            },
-          };
-        },
+        testToken: owner ? (owner === "owner" ? "a" : "b").repeat(64) : null,
         async rpc(name, args) {
           if (!online) throw Error("Offline");
+          if (
+            !owner ||
+            args.link_token !== (owner === "owner" ? "a" : "b").repeat(64)
+          )
+            return {
+              error: { code: "42501", message: "Invalid private link" },
+            };
           const previous = rows.get(owner) || { tasks: [], revision: 0 };
+          if (name === "load_taskline_link")
+            return { data: structuredClone(previous) };
           if (previous.revision !== args.expected_revision)
             return { error: { code: "40001" } };
           const revision = previous.revision + 1;
@@ -324,7 +306,7 @@ test("incoming cloud changes do not replace an open draft; stale save preserves 
   assert.equal(first.run("tasks.length"), 2);
 });
 
-test("cloud sign-in is required and offline writes are not presented as synced", async () => {
+test("a private link is required and offline writes are not presented as synced", async () => {
   const db = fakeCloudDatabase();
   const signedOut = start({}, db.client(null));
   await signedOut.run("cloudReady");

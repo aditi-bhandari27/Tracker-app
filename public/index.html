@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Taskline — Team task tracker</title>
     <meta
@@ -34,20 +35,15 @@
       >
         <div>
           <strong id="syncStatus" role="status">Connecting…</strong>
-          <p id="syncDetail">Use the same GitHub account on every computer.</p>
+          <p id="syncDetail">Open the same private link on every computer.</p>
         </div>
-        <form id="signInForm">
-          <button class="btn primary" type="submit">
-            Continue with GitHub
-          </button>
-        </form>
         <div class="sync-actions">
           <button id="migrateTasks" class="btn primary" type="button" hidden>
             Sync existing tasks</button
           ><button id="refreshCloud" class="btn" type="button" hidden>
             Refresh</button
-          ><button id="signOut" class="btn" type="button" hidden>
-            Sign out
+          ><button id="copySyncLink" class="btn" type="button" hidden>
+            Copy private link
           </button>
         </div>
       </section>
