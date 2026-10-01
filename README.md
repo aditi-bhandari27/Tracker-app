@@ -42,6 +42,12 @@ git subtree push --prefix public origin gh-pages
 
 Only static application files are published. Personal backup files must stay outside `public/`.
 
+## Copy a Teams standup update
+
+Click the clipboard icon beside **New task**. It fetches the latest saved records for the selected workspace, Current/Backlog list, and search filter, then copies a Teams-ready message and opens a preview. Tickets are top-level bullets; assignees, status, and description points are sub-bullets. Developer names use first names, including multiple assignees. Assigned ML developers are included. Description points stay verbatim (the original imported standup header and redundant blocker labels are removed). Blank descriptions say “Not specified.”
+
+The clipboard includes HTML for formatted Teams paste and a plain-text fallback. If clipboard access is unavailable, use **Copy message** or select the text in the preview. A cloud fetch failure does not copy stale data. This action never posts to Teams or changes saved tasks.
+
 ## Features
 
 - Independent workspace tabs, task counts, Current/Backlog lists, and search.

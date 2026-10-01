@@ -54,8 +54,31 @@ function start(store = {}, cloudClient = null) {
         return [];
       },
     });
-  const state = { failWrites: false, confirm: true };
+  const state = {
+    failWrites: false,
+    confirm: true,
+    clipboard: null,
+    clipboardFails: false,
+  };
   const context = vm.createContext({
+    Blob,
+    ClipboardItem: class {
+      constructor(data) {
+        this.data = data;
+      }
+    },
+    navigator: {
+      clipboard: {
+        async write(items) {
+          if (state.clipboardFails) throw Error("Clipboard denied");
+          const data = items[0].data;
+          state.clipboard = {
+            html: await (await data["text/html"]).text(),
+            text: await (await data["text/plain"]).text(),
+          };
+        },
+      },
+    },
     structuredClone,
     crypto: webcrypto,
     URL,
@@ -319,4 +342,100 @@ test("a private link is required and offline writes are not presented as synced"
   assert.equal(app.run("tasks.length"), 0);
   assert.equal(app.run("draft.title"), "Offline draft");
   assert.equal(app.element("syncStatus").textContent, "Not saved");
+});
+
+test("Teams format uses first names, nested bullets, actual statuses and every description point", () => {
+  const app = start();
+  const record = {
+    ...fixture(),
+    jiraKey: "CARE-122795",
+    title: "Analysis <script>",
+    ui: "Rahul Aggarwal",
+    backend: "Vyom Modi + Gaurav Jain",
+    ml: "Prashant Kumar",
+    notes:
+      "Agent Architect - Dev Standup\nETA: TBD\nBlocker: ML discussion needed\n• UI can start exploration",
+  };
+  const message = app.run(
+    `buildStandupMessage(${JSON.stringify([record])}, "Agent Architect")`,
+  );
+  assert.match(message.text, /• CARE-122795 \| Analysis <script>/);
+  assert.match(
+    message.text,
+    /    ◦ Assignees: UI — Rahul \| Backend — Vyom \+ Gaurav \| ML — Prashant/,
+  );
+  assert.match(message.text, /    ◦ Status: In QA/);
+  assert.match(
+    message.text,
+    /ETA: TBD; ML discussion needed; UI can start exploration/,
+  );
+  assert.doesNotMatch(message.text, /Aggarwal|Kumar|Jain/);
+  assert.match(
+    message.html,
+    /<li><strong>CARE-122795.*<ul><li><strong>Assignees:/,
+  );
+  assert.match(message.html, /&lt;script&gt;/);
+  assert.doesNotMatch(message.html, /<script>/);
+  assert.equal(
+    app.run('standupFirstNames("Mostly not needed")'),
+    "Mostly not needed",
+  );
+  assert.equal(app.run('standupFirstNames("—")'), "Unassigned");
+  assert.equal(app.run('standupNotes("")'), "Not specified");
+});
+
+test("Teams generation fetches fresh data and respects workspace, list and search", async () => {
+  const db = fakeCloudDatabase();
+  const first = start({}, db.client("owner"));
+  await first.run("cloudReady");
+  await create(first, "Previous title");
+  const second = start({}, db.client("owner"));
+  await second.run("cloudReady");
+  second.run("openEditor(tasks[0].id)");
+  second.element("taskTitle").value = "Latest title";
+  second.element("taskStatus").value = "In QA";
+  await second.element("taskForm").onsubmit({ preventDefault() {} });
+  await create(second, "Other workspace", "AI+ Studio");
+  await create(second, "Backlog task", "Agent Architect", "Backlog");
+  first.run(
+    'activeWorkspace="Agent Architect"; filter="Current"; query="Latest"',
+  );
+  assert.equal(first.run("tasks[0].title"), "Previous title");
+  await first.element("generateStandup").onclick();
+  assert.match(first.state.clipboard.text, /Latest title/);
+  assert.doesNotMatch(
+    first.state.clipboard.text,
+    /Other workspace|Backlog task|Previous title/,
+  );
+  assert.equal(first.element("standupDialog").open, true);
+  assert.equal(
+    first.element("standupCopyStatus").textContent,
+    "Copied — paste into Teams.",
+  );
+  assert.equal(
+    first.run("tasks[0].title"),
+    "Previous title",
+    "Generation does not mutate records",
+  );
+  db.offline();
+  first.state.clipboard = null;
+  await first.element("generateStandup").onclick();
+  assert.equal(first.state.clipboard, null);
+  assert.match(
+    first.element("toast").textContent,
+    /Update not generated: Offline/,
+  );
+});
+
+test("Teams clipboard denial keeps a copyable preview; empty lists are not copied", async () => {
+  const app = start({ [KEY]: JSON.stringify([fixture()]) });
+  app.state.clipboardFails = true;
+  await app.element("generateStandup").onclick();
+  assert.equal(app.element("standupDialog").open, true);
+  assert.match(app.element("standupText").value, /Example task/);
+  assert.match(app.element("standupCopyStatus").textContent, /Ready to copy/);
+  app.run('filter="Current"');
+  await app.element("generateStandup").onclick();
+  assert.match(app.element("toast").textContent, /No tasks/);
+  assert.equal(app.state.clipboard, null);
 });
