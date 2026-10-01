@@ -853,7 +853,7 @@ async function updateCloudAccount() {
     if (!user) {
       syncMessage(
         "Sign in to sync your tasks",
-        "Use the same email on every computer. Your existing browser tasks are kept safely for migration.",
+        "Continue with GitHub on every computer. No verification email is needed.",
       );
       await cloud.unsubscribe();
       render();
@@ -902,13 +902,13 @@ $("signInForm").onsubmit = async (event) => {
   if (!cloud) return;
   $("signInForm").inert = true;
   try {
-    await cloud.signIn($("signInEmail").value.trim());
+    await cloud.signIn();
     syncMessage(
-      "Check your email",
-      "Open the sign-in link to load your tasks. Use this same email on every computer.",
+      "Opening GitHub…",
+      "Sign in to GitHub to load your synced tasks.",
     );
   } catch (error) {
-    syncMessage("Sign-in link not sent", error.message);
+    syncMessage("Could not start GitHub sign-in", error.message);
   } finally {
     $("signInForm").inert = false;
   }

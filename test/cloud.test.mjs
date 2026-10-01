@@ -3,12 +3,29 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { readFileSync } from "node:fs";
 
-const context = vm.createContext({});
+const context = vm.createContext({
+  location: { origin: "https://example.com", pathname: "/tracker/" },
+});
 vm.runInContext(
   readFileSync(new URL("../public/cloud.js", import.meta.url), "utf8"),
   context,
 );
 const Cloud = context.TasklineCloud;
+
+test("sign-in uses GitHub OAuth without sending verification emails", async () => {
+  let request;
+  const cloud = new Cloud({
+    auth: {
+      signInWithOAuth: async (input) => {
+        request = input;
+        return {};
+      },
+    },
+  });
+  await cloud.signIn();
+  assert.equal(request.provider, "github");
+  assert.equal(request.options.redirectTo, "https://example.com/tracker/");
+});
 
 // In-memory service mirrors the database's owner-scoped read and atomic revision contract.
 function service() {

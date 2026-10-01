@@ -4,13 +4,13 @@ A dark-mode task tracker for **Agent Architect** and **AI+ Studio**. Each worksp
 
 **Public app:** https://aditi-bhandari27.github.io/Tracker-app/
 
-Live sync is enabled. Open this link on any computer and sign in with the same email to access the same tasks.
+Live sync is enabled. Open this link on any computer and sign in with the same GitHub account to access the same tasks.
 
 ## Live sync
 
-See [Supabase setup](supabase/SETUP.md) to activate email sign-in, private cloud storage, automatic updates, and server-side revision history. The client is included locally; no CDN is needed. The backend configuration is in `public/config.js` and uses only a public project URL and publishable key.
+See [Supabase setup](supabase/SETUP.md) to configure GitHub sign-in, private cloud storage, automatic updates, and server-side revision history. The client is included locally; no CDN is needed. The backend configuration is in `public/config.js` and uses only a public project URL and publishable key.
 
-Once connected, sign in on the browser that already has your tasks, then select **Sync existing tasks**. This copies them into your account without removing the local backup. Sign in with the same email elsewhere to see the list. Other accounts have separate data.
+Once connected, sign in on the browser that already has your tasks, then select **Sync existing tasks**. This copies them into your account without removing the local backup. Sign in with the same GitHub account elsewhere to see the list. Other accounts have separate data.
 
 Cloud saves are acknowledged by the server. Incoming changes arrive over Realtime with a 10-second fallback refresh. Conflicts preserve your draft instead of overwriting newer work. Offline changes are not marked as synced.
 
@@ -63,7 +63,7 @@ New tasks belong to the workspace and list selected when you create them. Status
 
 Use **Export backup** regularly and before clearing browser data or moving the app to another address. Use **Import backup** to restore your tasks. Import validates the file, shows a replacement confirmation, and saves a snapshot of the existing records before replacing them. It restores tasks across both workspaces. Never commit personal backup files to this public repository.
 
-The original prototype's `taskline.prototype.v1` storage key and JSON backup format remain compatible. Local records are preserved for migration. In local mode, a different port, browser, or hosted URL is a different storage location; import your exported backup there. In cloud mode, sign in with the same email instead.
+The original prototype's `taskline.prototype.v1` storage key and JSON backup format remain compatible. Local records are preserved for migration. In local mode, a different port, browser, or hosted URL is a different storage location; import your exported backup there. In cloud mode, sign in with the same GitHub account instead.
 
 Exports include current working records, exact saved records, backup history, and any open unsaved draft. Import restores `workingTasks` (or legacy `rawTasks`); unsaved drafts are retained in the file for manual recovery, not applied automatically. History is included as `rawHistory`; to restore an older snapshot, parse that field and import the desired snapshot's `raw` array as a JSON file.
 

@@ -17,10 +17,10 @@ class TasklineCloud {
     return this.user;
   }
 
-  async signIn(email) {
-    const { error } = await this.client.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: location.origin + location.pathname },
+  async signIn() {
+    const { error } = await this.client.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo: location.origin + location.pathname },
     });
     if (error) throw error;
   }
