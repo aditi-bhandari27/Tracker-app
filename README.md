@@ -2,6 +2,10 @@
 
 A dark-mode task tracker for **Agent Architect** and **AI+ Studio**. Each workspace has its own **Current** and **Backlog** lists.
 
+**Public app:** https://aditi-bhandari27.github.io/Tracker-app/
+
+Open this link on any computer. Task data is still local to each browser; use Export/Import backup to transfer it between computers. The public link does not provide automatic synchronization.
+
 ## Run locally
 
 Install Node.js 20 or newer, then run:
@@ -19,7 +23,18 @@ npm test      # Storage safety and task workflow checks
 npm run build # Copy static application into dist/
 ```
 
-Set `PORT` to change the port. The server binds to your computer only by default. Files in `public/` or `dist/` can be served by any static web host. No deployment is configured automatically.
+Set `PORT` to change the port. The server binds to your computer only by default. Files in `public/` or `dist/` can be served by any static web host.
+
+## Publish updates to GitHub Pages
+
+GitHub Pages serves the root of the `gh-pages` branch. After committing your changes to `main`, publish the public directory:
+
+```sh
+git push origin main
+git subtree push --prefix public origin gh-pages
+```
+
+Only static application files are published. Personal backup files must stay outside `public/`.
 
 ## Features
 
