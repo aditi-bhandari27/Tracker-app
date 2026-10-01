@@ -1151,6 +1151,9 @@ dialog::backdrop {
 .sync-panel[hidden] {
   display: none;
 }
+.sync-panel [hidden] {
+  display: none;
+}
 .sync-panel strong {
   font-size: 14px;
 }
