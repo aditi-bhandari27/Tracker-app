@@ -950,25 +950,11 @@ function standupFirstNames(value) {
     .join(" + ");
 }
 function standupNotes(value) {
-  const lines = (value || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  // Remove only the known header from the original imported standup records.
-  return (
-    lines
-      .filter((line) => !/^Agent Architect\s*[-—]\s*Dev Standup$/i.test(line))
-      .map((line) =>
-        line
-          .replace(/^(?:[-*•]\s+|\d+[.)]\s+)/, "")
-          .replace(
-            /^(?:blockers?(?:\s*\/\s*open points)?|open points)\s*:\s*/i,
-            "",
-          ),
-      )
-      .filter(Boolean)
-      .join("; ") || "Not specified"
-  );
+  // Copy the description itself, preserving its wording, points and line breaks.
+  return (value || "").replace(/\r\n?/g, "\n").trim() || "Not specified";
+}
+function standupAssignee(role, name, eta) {
+  return `${role} — ${standupFirstNames(name)} (ETA: ${(eta || "").trim() || "TBD"})`;
 }
 function buildStandupMessage(records, workspace) {
   const heading = `${workspace} — Dev Standup`;
@@ -978,11 +964,11 @@ function buildStandupMessage(records, workspace) {
       (task.jira || "").match(/\b[A-Z][A-Z0-9_]*-\d+\b/i)?.[0] ||
       taskCode(task);
     const title = `${jira} | ${task.title}`;
-    const owners =
-      `UI — ${standupFirstNames(task.ui)} | Backend — ${standupFirstNames(task.backend)}` +
-      (standupFirstNames(task.ml) !== "Unassigned"
-        ? ` | ML — ${standupFirstNames(task.ml)}`
-        : "");
+    const owners = [
+      standupAssignee("UI", task.ui, task.uiEta),
+      standupAssignee("Backend", task.backend, task.backendEta),
+      standupAssignee("ML", task.ml, task.mlEta),
+    ].join(" | ");
     const details = [
       ["Assignees", owners],
       ["Status", task.status],
@@ -1001,7 +987,10 @@ function buildStandupMessage(records, workspace) {
             entry.title +
             "\n" +
             entry.details
-              .map(([label, value]) => `    ◦ ${label}: ${value}`)
+              .map(
+                ([label, value]) =>
+                  `    ◦ ${label}: ${value.replaceAll("\n", "\n      ")}`,
+              )
               .join("\n"),
         )
         .join("\n\n"),
@@ -1014,7 +1003,7 @@ function buildStandupMessage(records, workspace) {
             entry.details
               .map(
                 ([label, value]) =>
-                  `<li><strong>${esc(label)}:</strong> ${esc(value)}</li>`,
+                  `<li><strong>${esc(label)}:</strong> ${esc(value).replaceAll("\n", "<br>")}</li>`,
               )
               .join("") +
             "</ul></li>",
