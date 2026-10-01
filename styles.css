@@ -1136,6 +1136,53 @@ dialog::backdrop {
   color: #e1d6fb;
 }
 
+.sync-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  margin-bottom: 28px;
+  background: #1c1b25;
+  border: 1px solid #413951;
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+.sync-panel[hidden] {
+  display: none;
+}
+.sync-panel strong {
+  font-size: 14px;
+}
+.sync-panel p {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.sync-panel form,
+.sync-actions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.sync-panel form[hidden] {
+  display: none;
+}
+.sync-panel input {
+  background: var(--input);
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 12px;
+  min-width: 220px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
 .backup-actions {
   display: flex;
   gap: 18px;
