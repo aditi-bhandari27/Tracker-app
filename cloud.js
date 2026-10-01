@@ -27,7 +27,7 @@ class TasklineCloud {
       new_tasks: tasks,
     });
     if (error) {
-      if (error.code === "40001")
+      if (["PT409", "40001"].includes(error.code))
         throw Error(
           "Tasks changed on another computer. Your draft is kept. Export it, then close the form and refresh before applying your changes.",
         );
