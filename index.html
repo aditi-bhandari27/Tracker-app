@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Taskline — Team task tracker</title>
+    <meta
+      name="description"
+      content="Keep tasks, developer assignments, status updates, and issues in one place."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%238270f3'/%3E%3Cpath d='M11 13h18M11 20h13M11 27h8' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo" aria-hidden="true"><i></i><i></i><i></i></span
+        >taskline
+      </div>
+      <div class="workspace">
+        <span>Local workspace</span
+        ><span class="avatar" aria-label="Team workspace">T</span>
+      </div>
+    </header>
+    <main>
+      <div class="heading">
+        <div>
+          <div class="page-eyebrow">Team workspace</div>
+          <h1>Tasks</h1>
+          <p class="subtitle">Every task. Every owner. One place.</p>
+        </div>
+        <button class="btn primary" id="newTask">
+          <span class="plus" aria-hidden="true">+</span> New task
+        </button>
+      </div>
+      <div id="storageError" class="storage-error" role="alert">
+        Browser storage is unavailable. Export a backup before closing this
+        page.
+      </div>
+      <div
+        class="product-tabs"
+        id="productTabs"
+        role="tablist"
+        aria-label="Task workspace"
+      ></div>
+      <section
+        class="taskbox"
+        id="tasksPanel"
+        role="tabpanel"
+        aria-labelledby="product-agent"
+      >
+        <div class="toolbar">
+          <div
+            class="tabs"
+            role="group"
+            aria-label="Task lists"
+            id="tabs"
+          ></div>
+          <label class="search"
+            ><svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              aria-hidden="true"
+            >
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 5 5" /></svg
+            ><input
+              type="search"
+              id="search"
+              placeholder="Search tasks or people…"
+              aria-label="Search tasks or people"
+          /></label>
+        </div>
+        <div class="table-wrap">
+          <table aria-label="Team tasks">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Status</th>
+                <th>Issue type</th>
+                <th>UI developer</th>
+                <th>Backend dev</th>
+                <th>ML developer</th>
+                <th>Issues</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div id="empty" class="empty" hidden></div>
+        <div class="table-foot">
+          <span id="results"></span
+          ><span class="legend">Select a task to view details and issues</span>
+        </div>
+      </section>
+      <div class="bottom-note">
+        <span id="saveNote"
+          >Saved in this browser · Export a backup to keep a copy</span
+        >
+        <div class="backup-actions">
+          <button class="backup-button" type="button" id="importBackup">
+            Import backup</button
+          ><button class="backup-button" type="button" id="exportBackup">
+            Export backup</button
+          ><input
+            type="file"
+            id="backupFile"
+            accept="application/json,.json"
+            hidden
+          />
+        </div>
+      </div>
+    </main>
+    <dialog id="taskDialog" aria-labelledby="editorTitle">
+      <form class="editor" id="taskForm">
+        <div class="editor-head">
+          <div>
+            <div class="eyebrow" id="taskCode">NEW TASK</div>
+            <h2 id="editorTitle">Task details</h2>
+            <p class="editor-context" id="editorWorkspace"></p>
+          </div>
+          <button
+            class="iconbtn"
+            type="button"
+            id="closeEditor"
+            aria-label="Close task details"
+          >
+            ×
+          </button>
+        </div>
+        <nav
+          class="task-navigation"
+          id="taskNavigation"
+          aria-label="Switch tasks"
+          hidden
+        >
+          <button
+            class="btn"
+            type="button"
+            id="previousTask"
+            aria-label="Previous task"
+          >
+            ‹ Previous</button
+          ><span
+            class="task-position"
+            id="taskPosition"
+            role="status"
+            aria-live="polite"
+          ></span
+          ><button
+            class="btn"
+            type="button"
+            id="nextTask"
+            aria-label="Next task"
+          >
+            Next ›
+          </button>
+        </nav>
+        <div class="editor-body">
+          <label class="field"
+            ><span>Task title <span aria-hidden="true">*</span></span
+            ><input
+              id="taskTitle"
+              required
+              maxlength="160"
+              placeholder="What needs to be done?"
+          /></label>
+          <div class="form-two">
+            <label class="field"
+              ><span>Status</span
+              ><select id="taskStatus"></select></label
+            ><label class="field"
+              ><span>Issue type</span
+              ><select id="taskIssueType"></select
+            ></label>
+          </div>
+          <div class="form-two assignment-row">
+            <label class="field"
+              ><span>UI developer</span
+              ><input
+                id="uiDev"
+                maxlength="80"
+                placeholder="Add a name" /></label
+            ><label class="field"
+              ><span>UI ETA</span
+              ><input
+                id="uiEta"
+                maxlength="100"
+                placeholder="TBD or a date"
+                autocomplete="off"
+            /></label>
+          </div>
+          <div class="form-two assignment-row">
+            <label class="field"
+              ><span>Backend developer</span
+              ><input
+                id="beDev"
+                maxlength="80"
+                placeholder="Add a name" /></label
+            ><label class="field"
+              ><span>Backend ETA</span
+              ><input
+                id="backendEta"
+                maxlength="100"
+                placeholder="TBD or a date"
+                autocomplete="off"
+            /></label>
+          </div>
+          <div class="form-two assignment-row">
+            <label class="field"
+              ><span>ML developer</span
+              ><input
+                id="mlDev"
+                maxlength="80"
+                placeholder="Add a name" /></label
+            ><label class="field"
+              ><span>ML ETA</span
+              ><input
+                id="mlEta"
+                maxlength="100"
+                placeholder="TBD or a date"
+                autocomplete="off"
+            /></label>
+          </div>
+          <div class="field">
+            <div class="link-heading">
+              <label for="jiraLink">JIRA link</label
+              ><a id="openJira" target="_blank" rel="noopener noreferrer" hidden
+                >Open JIRA</a
+              >
+            </div>
+            <input
+              id="jiraLink"
+              type="url"
+              pattern="https?://.+"
+              maxlength="2048"
+              placeholder="https://your-team.atlassian.net/browse/PROJ-123"
+              title="Enter a full http:// or https:// URL"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field">
+            <div class="link-heading">
+              <label for="designLink">Designs link</label
+              ><a
+                id="openDesign"
+                target="_blank"
+                rel="noopener noreferrer"
+                hidden
+                >Open designs</a
+              >
+            </div>
+            <input
+              id="designLink"
+              type="url"
+              pattern="https?://.+"
+              maxlength="2048"
+              placeholder="https://www.figma.com/design/…"
+              title="Enter a full http:// or https:// URL"
+              autocomplete="off"
+            />
+          </div>
+          <label class="field"
+            ><span>Current update & blockers</span
+            ><textarea
+              id="taskNotes"
+              maxlength="10000"
+              placeholder="What's the latest? Add progress, blockers, decisions, or anything the team should know."
+            ></textarea>
+          </label>
+          <div class="section-heading">
+            <h3>Issues <span id="issueCount"></span></h3>
+            <span id="resolvedCount"></span>
+          </div>
+          <div id="issueList"></div>
+          <div class="addissue">
+            <input
+              class="issue-input"
+              id="issueTitle"
+              aria-label="New issue title"
+              maxlength="300"
+              placeholder="Describe a new issue…"
+            /><button class="btn" type="button" id="addIssue">
+              <span class="plus" aria-hidden="true">+</span> Add
+            </button>
+          </div>
+          <p class="hint">
+            Edit an issue inline, update its status, or remove it. Save changes
+            when you're done.
+          </p>
+        </div>
+        <div class="editor-foot">
+          <button class="btn danger" type="button" id="deleteTask">
+            Delete task
+          </button>
+          <div>
+            <button class="btn" type="button" id="cancelEditor">Cancel</button
+            ><button class="btn primary" type="submit">Save changes</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" role="status" id="toast" hidden></div>
+    <textarea
+      id="backupSnapshot"
+      hidden
+      readonly
+      aria-label="Recovery backup"
+    ></textarea>
+    <script src="app.js" defer></script>
+  </body>
+</html>
