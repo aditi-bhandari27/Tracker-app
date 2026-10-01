@@ -1194,3 +1194,76 @@ dialog::backdrop {
 .backup-button {
   min-height: 36px;
 }
+
+.heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.standup-icon {
+  width: 42px;
+  padding: 9px;
+  color: var(--purple);
+}
+#standupDialog {
+  width: min(760px, calc(100vw - 32px));
+  padding: 24px;
+}
+.standup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.standup-header h2 {
+  margin: 0 0 6px;
+}
+#standupScope,
+#standupCopyStatus,
+.standup-text-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+#standupCopyStatus {
+  margin: 16px 0;
+  color: var(--purple);
+}
+.standup-preview {
+  padding: 20px;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.standup-preview ul {
+  padding-left: 22px;
+}
+.standup-preview > ul > li {
+  margin-bottom: 16px;
+}
+.standup-preview ul ul {
+  margin: 5px 0 0;
+}
+.standup-text-label {
+  display: block;
+  margin: 20px 0 8px;
+}
+#standupText {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+}
+.standup-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+@media (max-width: 700px) {
+  .heading-actions {
+    gap: 6px;
+  }
+  #standupDialog {
+    padding: 16px;
+  }
+}

@@ -23,6 +23,7 @@ const cloudConfig = globalThis.TASKLINE_CONFIG || {};
 const cloudEnabled = Boolean(
   cloudConfig.supabaseUrl && cloudConfig.supabasePublishableKey,
 );
+let generatingStandup = false;
 let cloud = null,
   saving = false,
   loadingCloud = false,
@@ -304,6 +305,9 @@ function render() {
   );
   $("newTask").setAttribute("aria-label", `New task in ${activeWorkspace}`);
   $("newTask").disabled = !canEdit();
+  $("generateStandup").disabled = !canEdit() || generatingStandup;
+  $("generateStandup").title =
+    `Generate and copy Teams update: ${activeWorkspace} · ${filter}${query ? " · Search results" : ""}`;
   $("importBackup").disabled = cloudEnabled ? !canEdit() : saving;
   $("migrateTasks").disabled = saving || !cloudLoaded;
   $("copySyncLink").disabled = !cloudLoaded;
@@ -929,3 +933,196 @@ $("migrateTasks").onclick = async () => {
   }
 };
 const cloudReady = cloudEnabled ? startCloud() : Promise.resolve();
+
+function standupFirstNames(value) {
+  const name = (value || "").trim();
+  if (!name || /^[-—–]+$/.test(name) || /^unassigned$/i.test(name))
+    return "Unassigned";
+  if (
+    /^(mostly )?not (needed|required|applicable)$/i.test(name) ||
+    /^n\/?a$/i.test(name)
+  )
+    return name;
+  return name
+    .split(/\s*(?:\+|,|&|;|\/|\band\b)\s*/i)
+    .filter(Boolean)
+    .map((part) => part.trim().split(/\s+/)[0])
+    .join(" + ");
+}
+function standupNotes(value) {
+  const lines = (value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  // Remove only the known header from the original imported standup records.
+  return (
+    lines
+      .filter((line) => !/^Agent Architect\s*[-—]\s*Dev Standup$/i.test(line))
+      .map((line) =>
+        line
+          .replace(/^(?:[-*•]\s+|\d+[.)]\s+)/, "")
+          .replace(
+            /^(?:blockers?(?:\s*\/\s*open points)?|open points)\s*:\s*/i,
+            "",
+          ),
+      )
+      .filter(Boolean)
+      .join("; ") || "Not specified"
+  );
+}
+function buildStandupMessage(records, workspace) {
+  const heading = `${workspace} — Dev Standup`;
+  const entries = records.map((task) => {
+    const jira =
+      task.jiraKey ||
+      (task.jira || "").match(/\b[A-Z][A-Z0-9_]*-\d+\b/i)?.[0] ||
+      taskCode(task);
+    const title = `${jira} | ${task.title}`;
+    const owners =
+      `UI — ${standupFirstNames(task.ui)} | Backend — ${standupFirstNames(task.backend)}` +
+      (standupFirstNames(task.ml) !== "Unassigned"
+        ? ` | ML — ${standupFirstNames(task.ml)}`
+        : "");
+    const details = [
+      ["Assignees", owners],
+      ["Status", task.status],
+      ["Blockers / Open points", standupNotes(task.notes)],
+    ];
+    return { title, details };
+  });
+  return {
+    text:
+      heading +
+      "\n\n" +
+      entries
+        .map(
+          (entry) =>
+            "• " +
+            entry.title +
+            "\n" +
+            entry.details
+              .map(([label, value]) => `    ◦ ${label}: ${value}`)
+              .join("\n"),
+        )
+        .join("\n\n"),
+    html:
+      `<p><strong>${esc(heading)}</strong></p><ul>` +
+      entries
+        .map(
+          (entry) =>
+            `<li><strong>${esc(entry.title)}</strong><ul>` +
+            entry.details
+              .map(
+                ([label, value]) =>
+                  `<li><strong>${esc(label)}:</strong> ${esc(value)}</li>`,
+              )
+              .join("") +
+            "</ul></li>",
+        )
+        .join("") +
+      "</ul>",
+  };
+}
+let standupMessage = null;
+async function prepareStandupMessage() {
+  if (!canEdit() || draft)
+    throw Error("Save or close the task form before generating an update.");
+  const workspace = activeWorkspace,
+    list = filter,
+    search = query.toLowerCase();
+  // Fetch specifically for this action: a failed fetch must never copy stale updates.
+  const source = cloudEnabled
+    ? parseBackup(JSON.stringify((await cloud.load()).tasks))
+    : structuredClone(tasks);
+  const selected = source.filter(
+    (task) =>
+      task.workspace === workspace &&
+      task.list === list &&
+      [
+        task.title,
+        task.issueType,
+        task.ui,
+        task.backend,
+        task.ml,
+        task.notes,
+        ...task.issues.map((issue) => issue.title),
+        taskCode(task),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(search),
+  );
+  if (!selected.length)
+    throw Error("No tasks in this list match your filters.");
+  return {
+    ...buildStandupMessage(selected, workspace),
+    scope: `${workspace} · ${list} · ${selected.length} tasks${search ? " · Search results" : ""} · Latest saved updates`,
+  };
+}
+function writeStandupClipboard(messagePromise) {
+  const clipboard = globalThis.navigator?.clipboard;
+  // Promise-backed items start during the click gesture, including in Safari.
+  if (clipboard?.write && globalThis.ClipboardItem) {
+    const html = messagePromise.then(
+      (message) => new Blob([message.html], { type: "text/html" }),
+    );
+    const text = messagePromise.then(
+      (message) => new Blob([message.text], { type: "text/plain" }),
+    );
+    // A denied clipboard write may never consume these promised representations.
+    html.catch(() => {});
+    text.catch(() => {});
+    return clipboard.write([
+      new ClipboardItem({ "text/html": html, "text/plain": text }),
+    ]);
+  }
+  return messagePromise.then((message) => {
+    if (!clipboard?.writeText) throw Error("Clipboard unavailable");
+    return clipboard.writeText(message.text);
+  });
+}
+$("generateStandup").onclick = async () => {
+  if (generatingStandup || !canEdit()) return;
+  const pending = prepareStandupMessage();
+  generatingStandup = true;
+  render();
+  $("generateStandup").setAttribute("aria-busy", "true");
+  const copied = writeStandupClipboard(pending).then(
+    () => true,
+    () => false,
+  );
+  try {
+    const message = await pending;
+    const success = await copied;
+    standupMessage = message;
+    $("standupScope").textContent = message.scope;
+    $("standupPreview").innerHTML = message.html;
+    $("standupText").value = message.text;
+    $("standupCopyStatus").textContent = success
+      ? "Copied — paste into Teams."
+      : "Ready to copy. Use Copy message, or select the plain text below.";
+    $("standupDialog").showModal();
+  } catch (error) {
+    notify("Update not generated: " + error.message);
+  } finally {
+    generatingStandup = false;
+    $("generateStandup").removeAttribute("aria-busy");
+    render();
+  }
+};
+$("copyStandup").onclick = async () => {
+  if (!standupMessage) return;
+  try {
+    await writeStandupClipboard(Promise.resolve(standupMessage));
+    $("standupCopyStatus").textContent = "Copied — paste into Teams.";
+  } catch {
+    $("standupCopyStatus").textContent =
+      "Press Ctrl+C or ⌘C to copy the selected text.";
+    $("standupText").focus();
+    $("standupText").select();
+  }
+};
+$("closeStandup").onclick = () => $("standupDialog").close();
+$("standupDialog").addEventListener("close", () =>
+  $("generateStandup").focus(),
+);

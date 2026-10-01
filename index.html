@@ -53,9 +53,35 @@
           <h1>Tasks</h1>
           <p class="subtitle">Every task. Every owner. One place.</p>
         </div>
-        <button class="btn primary" id="newTask">
-          <span class="plus" aria-hidden="true">+</span> New task
-        </button>
+        <div class="heading-actions">
+          <button
+            class="btn standup-icon"
+            id="generateStandup"
+            type="button"
+            aria-label="Generate and copy Teams update"
+            title="Generate and copy Teams update for this list"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="7" y="7" width="13" height="14" rx="2" />
+              <path
+                d="M16 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2M11 12h5M11 16h5"
+              />
+            </svg>
+          </button>
+          <button class="btn primary" id="newTask">
+            <span class="plus" aria-hidden="true">+</span> New task
+          </button>
+        </div>
       </div>
       <div id="storageError" class="storage-error" role="alert">
         Browser storage is unavailable. Export a backup before closing this
@@ -327,6 +353,33 @@
           </div>
         </div>
       </form>
+    </dialog>
+    <dialog id="standupDialog" aria-labelledby="standupTitle">
+      <div class="standup-header">
+        <div>
+          <h2 id="standupTitle">Teams update</h2>
+          <p id="standupScope"></p>
+        </div>
+        <button
+          class="btn"
+          id="closeStandup"
+          type="button"
+          aria-label="Close Teams update"
+        >
+          ×
+        </button>
+      </div>
+      <p id="standupCopyStatus" role="status"></p>
+      <div id="standupPreview" class="standup-preview"></div>
+      <label class="standup-text-label" for="standupText"
+        >Plain text — select and copy if needed</label
+      >
+      <textarea id="standupText" readonly rows="9"></textarea>
+      <div class="standup-footer">
+        <button class="btn primary" id="copyStandup" type="button">
+          Copy message
+        </button>
+      </div>
     </dialog>
     <div class="toast" role="status" id="toast" hidden></div>
     <textarea
