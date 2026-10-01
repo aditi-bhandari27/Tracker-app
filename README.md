@@ -4,7 +4,7 @@ A dark-mode task tracker for **Agent Architect** and **AI+ Studio**. Each worksp
 
 **Public app:** https://aditi-bhandari27.github.io/Tracker-app/
 
-Open this link on any computer. When cloud sync is configured, sign in with the same email on each computer to access the same tasks. Until configuration is complete, the app continues to use local browser storage.
+Live sync is enabled. Open this link on any computer and sign in with the same email to access the same tasks.
 
 ## Live sync
 
