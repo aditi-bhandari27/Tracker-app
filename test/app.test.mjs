@@ -344,7 +344,7 @@ test("a private link is required and offline writes are not presented as synced"
   assert.equal(app.element("syncStatus").textContent, "Not saved");
 });
 
-test("Teams format uses first names, nested bullets, actual statuses and every description point", () => {
+test("Teams format uses first names with role ETAs, nested bullets and verbatim descriptions", () => {
   const app = start();
   const record = {
     ...fixture(),
@@ -353,6 +353,9 @@ test("Teams format uses first names, nested bullets, actual statuses and every d
     ui: "Rahul Aggarwal",
     backend: "Vyom Modi + Gaurav Jain",
     ml: "Prashant Kumar",
+    uiEta: "Merged",
+    backendEta: "Awaiting API review",
+    mlEta: "1st October",
     notes:
       "Agent Architect - Dev Standup\nETA: TBD\nBlocker: ML discussion needed\n• UI can start exploration",
   };
@@ -362,13 +365,32 @@ test("Teams format uses first names, nested bullets, actual statuses and every d
   assert.match(message.text, /• CARE-122795 \| Analysis <script>/);
   assert.match(
     message.text,
-    /    ◦ Assignees: UI — Rahul \| Backend — Vyom \+ Gaurav \| ML — Prashant/,
+    /    ◦ Assignees: UI — Rahul \(ETA: Merged\) \| Backend — Vyom \+ Gaurav \(ETA: Awaiting API review\) \| ML — Prashant \(ETA: 1st October\)/,
   );
   assert.match(message.text, /    ◦ Status: In QA/);
-  assert.match(
-    message.text,
-    /ETA: TBD; ML discussion needed; UI can start exploration/,
+  assert.ok(
+    message.text.includes(
+      "Blockers / Open points: " + record.notes.replaceAll("\n", "\n      "),
+    ),
   );
+  assert.ok(
+    message.html.includes(
+      "Agent Architect - Dev Standup<br>ETA: TBD<br>Blocker: ML discussion needed<br>• UI can start exploration",
+    ),
+  );
+  assert.equal(
+    app.run('standupAssignee("ML", "", "")'),
+    "ML — Unassigned (ETA: TBD)",
+  );
+  assert.equal(
+    app.run('standupAssignee("Backend", "Mostly not needed", "-")'),
+    "Backend — Mostly not needed (ETA: -)",
+  );
+  const escaped = app.run(
+    'buildStandupMessage([{id:"safe",number:1,title:"Safe",ui:"Satyam",uiEta:"<script>x</script>",notes:"First point\\nSecond <b>point</b>", status:"In QA"}],"Agent Architect")',
+  );
+  assert.match(escaped.html, /ETA: &lt;script&gt;x&lt;\/script&gt;/);
+  assert.match(escaped.html, /First point<br>Second &lt;b&gt;point&lt;\/b&gt;/);
   assert.doesNotMatch(message.text, /Aggarwal|Kumar|Jain/);
   assert.match(
     message.html,

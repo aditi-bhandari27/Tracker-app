@@ -44,7 +44,7 @@ Only static application files are published. Personal backup files must stay out
 
 ## Copy a Teams standup update
 
-Click the clipboard icon beside **New task**. It fetches the latest saved records for the selected workspace, Current/Backlog list, and search filter, then copies a Teams-ready message and opens a preview. Tickets are top-level bullets; assignees, status, and description points are sub-bullets. Developer names use first names, including multiple assignees. Assigned ML developers are included. Description points stay verbatim (the original imported standup header and redundant blocker labels are removed). Blank descriptions say “Not specified.”
+Click the clipboard icon beside **New task**. It fetches the latest saved records for the selected workspace, Current/Backlog list, and search filter, then copies a Teams-ready message and opens a preview. Tickets are top-level bullets; assignees, status, and description points are sub-bullets. Developer names use first names, including multiple assignees. UI, Backend and ML each show their developer and role-specific ETA beside the name, preserving dates or text such as “Merged.” Empty ETAs show “TBD.” Blockers / Open points copies the task description verbatim, including all points and line breaks. Blank descriptions say “Not specified.”
 
 The clipboard includes HTML for formatted Teams paste and a plain-text fallback. If clipboard access is unavailable, use **Copy message** or select the text in the preview. A cloud fetch failure does not copy stale data. This action never posts to Teams or changes saved tasks.
 
