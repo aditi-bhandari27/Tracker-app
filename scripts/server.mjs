@@ -10,6 +10,12 @@ const routes = new Map([
   ["/index.html", ["index.html", "text/html"]],
   ["/task-tracker.html", ["index.html", "text/html"]],
   ["/app.js", ["app.js", "text/javascript"]],
+  ["/config.js", ["config.js", "text/javascript"]],
+  ["/cloud.js", ["cloud.js", "text/javascript"]],
+  [
+    "/vendor/supabase-2.117.2.js",
+    ["vendor/supabase-2.117.2.js", "text/javascript"],
+  ],
   ["/styles.css", ["styles.css", "text/css"]],
 ]);
 
@@ -31,7 +37,7 @@ export const server = http.createServer(async (request, response) => {
       "Cache-Control": "no-cache",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
     });
     response.end(request.method === "HEAD" ? undefined : content);
   } catch {

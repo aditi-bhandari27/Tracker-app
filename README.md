@@ -4,7 +4,15 @@ A dark-mode task tracker for **Agent Architect** and **AI+ Studio**. Each worksp
 
 **Public app:** https://aditi-bhandari27.github.io/Tracker-app/
 
-Open this link on any computer. Task data is still local to each browser; use Export/Import backup to transfer it between computers. The public link does not provide automatic synchronization.
+Open this link on any computer. When cloud sync is configured, sign in with the same email on each computer to access the same tasks. Until configuration is complete, the app continues to use local browser storage.
+
+## Live sync
+
+See [Supabase setup](supabase/SETUP.md) to activate email sign-in, private cloud storage, automatic updates, and server-side revision history. The client is included locally; no CDN is needed. The backend configuration is in `public/config.js` and uses only a public project URL and publishable key.
+
+Once connected, sign in on the browser that already has your tasks, then select **Sync existing tasks**. This copies them into your account without removing the local backup. Sign in with the same email elsewhere to see the list. Other accounts have separate data.
+
+Cloud saves are acknowledged by the server. Incoming changes arrive over Realtime with a 10-second fallback refresh. Conflicts preserve your draft instead of overwriting newer work. Offline changes are not marked as synced.
 
 ## Run locally
 
@@ -51,11 +59,11 @@ New tasks belong to the workspace and list selected when you create them. Status
 
 ## Your data and backups
 
-**This is a local-first application, not a shared database.** Tasks stay in the current browser's local storage. GitHub contains only application code; no personal task records, standup data, or recovery backups are committed. A fresh browser starts empty.
+**With cloud sync configured, tasks are saved in your authenticated Supabase account.** GitHub contains only application code; no personal task records, standup data, or recovery backups are committed. With cloud configuration empty, the app uses local browser storage and a fresh browser starts empty.
 
 Use **Export backup** regularly and before clearing browser data or moving the app to another address. Use **Import backup** to restore your tasks. Import validates the file, shows a replacement confirmation, and saves a snapshot of the existing records before replacing them. It restores tasks across both workspaces. Never commit personal backup files to this public repository.
 
-The original prototype's `taskline.prototype.v1` storage key and JSON backup format remain compatible. Opening the app at the same protocol, hostname, and port preserves existing saved records. A different port, browser, or hosted URL is a different storage location; import your exported backup there.
+The original prototype's `taskline.prototype.v1` storage key and JSON backup format remain compatible. Local records are preserved for migration. In local mode, a different port, browser, or hosted URL is a different storage location; import your exported backup there. In cloud mode, sign in with the same email instead.
 
 Exports include current working records, exact saved records, backup history, and any open unsaved draft. Import restores `workingTasks` (or legacy `rawTasks`); unsaved drafts are retained in the file for manual recovery, not applied automatically. History is included as `rawHistory`; to restore an older snapshot, parse that field and import the desired snapshot's `raw` array as a JSON file.
 
@@ -72,4 +80,4 @@ scripts/build.mjs   Static distribution build
 test/               Node test runner checks with synthetic task data
 ```
 
-No external fonts, analytics, APIs, or network requests are required by the app.
+Local mode requires no external services. Cloud mode connects only to the configured Supabase project for authentication, database access, and Realtime updates. The vendored Supabase client is version 2.117.2; its MIT license is included in `public/vendor/`.

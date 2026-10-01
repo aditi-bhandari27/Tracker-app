@@ -21,11 +21,41 @@
         >taskline
       </div>
       <div class="workspace">
-        <span>Local workspace</span
+        <span id="accountLabel">Local workspace</span
         ><span class="avatar" aria-label="Team workspace">T</span>
       </div>
     </header>
     <main>
+      <section
+        id="syncPanel"
+        class="sync-panel"
+        hidden
+        aria-label="Account and sync"
+      >
+        <div>
+          <strong id="syncStatus" role="status">Connecting…</strong>
+          <p id="syncDetail">Sign in with the same email on every computer.</p>
+        </div>
+        <form id="signInForm">
+          <label class="sr-only" for="signInEmail">Email address</label
+          ><input
+            id="signInEmail"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="Your email address"
+          /><button class="btn primary" type="submit">Send sign-in link</button>
+        </form>
+        <div class="sync-actions">
+          <button id="migrateTasks" class="btn primary" type="button" hidden>
+            Sync existing tasks</button
+          ><button id="refreshCloud" class="btn" type="button" hidden>
+            Refresh</button
+          ><button id="signOut" class="btn" type="button" hidden>
+            Sign out
+          </button>
+        </div>
+      </section>
       <div class="heading">
         <div>
           <div class="page-eyebrow">Team workspace</div>
@@ -314,6 +344,9 @@
       readonly
       aria-label="Recovery backup"
     ></textarea>
+    <script src="config.js" defer></script>
+    <script src="vendor/supabase-2.117.2.js" defer></script>
+    <script src="cloud.js" defer></script>
     <script src="app.js" defer></script>
   </body>
 </html>

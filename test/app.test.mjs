@@ -22,7 +22,7 @@ const fixture = (id = "sample-1") => ({
   issues: [],
 });
 
-function start(store = {}) {
+function start(store = {}, cloudClient = null) {
   const elements = {};
   const element = (id) =>
     (elements[id] ??= {
@@ -75,7 +75,19 @@ function start(store = {}) {
     confirm: () => state.confirm,
     setTimeout: () => 1,
     clearTimeout() {},
+    setInterval() {},
+    TASKLINE_CONFIG: cloudClient
+      ? {
+          supabaseUrl: "https://example.supabase.co",
+          supabasePublishableKey: "public-test-key",
+        }
+      : {},
+    supabase: { createClient: () => cloudClient },
   });
+  vm.runInContext(
+    readFileSync(new URL("../public/cloud.js", import.meta.url), "utf8"),
+    context,
+  );
   vm.runInContext(source, context);
   return {
     run: (text) => vm.runInContext(text, context),
@@ -85,17 +97,22 @@ function start(store = {}) {
   };
 }
 
-function create(app, title, workspace = "Agent Architect", list = "Current") {
+async function create(
+  app,
+  title,
+  workspace = "Agent Architect",
+  list = "Current",
+) {
   app.run(
     `switchWorkspace(${JSON.stringify(workspace)});filter=${JSON.stringify(list)};openEditor();`,
   );
   app.element("taskTitle").value = title;
   app.element("taskStatus").value = "In QA";
   app.element("taskIssueType").value = "Backend + ML + UI";
-  app.element("taskForm").onsubmit({ preventDefault() {} });
+  await app.element("taskForm").onsubmit({ preventDefault() {} });
 }
 
-test("new installs are empty; legacy data and edits survive reload unchanged", () => {
+test("new installs are empty; legacy data and edits survive reload unchanged", async () => {
   assert.equal(start().run("tasks.length"), 0);
   const raw = JSON.stringify([fixture()]);
   const app = start({ [KEY]: raw });
@@ -105,11 +122,11 @@ test("new installs are empty; legacy data and edits survive reload unchanged", (
   assert.equal(app.store[KEY], raw);
 });
 
-test("workspace and list isolation, search, issue creation, navigation and reload", () => {
+test("workspace and list isolation, search, issue creation, navigation and reload", async () => {
   const app = start();
-  create(app, "Architect task");
-  create(app, "Studio current", "AI+ Studio");
-  create(app, "Studio backlog", "AI+ Studio", "Backlog");
+  await create(app, "Architect task");
+  await create(app, "Studio current", "AI+ Studio");
+  await create(app, "Studio backlog", "AI+ Studio", "Backlog");
   assert.equal(app.run("visibleTasks().length"), 1);
   assert.equal(app.run("visibleTasks()[0].title"), "Studio backlog");
   app.run('query="Architect"');
@@ -120,7 +137,7 @@ test("workspace and list isolation, search, issue creation, navigation and reloa
   app.element("issueTitle").value = "Investigate failure";
   app.run("addIssue()");
   app.element("taskStatus").value = "In QA";
-  app.element("taskForm").onsubmit({ preventDefault() {} });
+  await app.element("taskForm").onsubmit({ preventDefault() {} });
   app.run("rememberView()");
   const reload = start(app.store);
   assert.equal(reload.run("activeWorkspace"), "AI+ Studio");
@@ -132,37 +149,37 @@ test("workspace and list isolation, search, issue creation, navigation and reloa
   assert.equal(reload.run("tasks.length"), 3);
 });
 
-test("invalid stored records cannot be replaced by accidental saves", () => {
+test("invalid stored records cannot be replaced by accidental saves", async () => {
   const app = start({ [KEY]: "{broken" });
   assert.equal(app.run("loadSucceeded"), false);
-  assert.equal(app.run("save()"), false);
+  assert.equal(await app.run("save()"), false);
   assert.equal(app.store[KEY], "{broken");
   assert.equal(app.element("newTask").disabled, true);
 });
 
-test("failed writes retain the draft and prior saved records", () => {
+test("failed writes retain the draft and prior saved records", async () => {
   const app = start({ [KEY]: JSON.stringify([fixture()]) });
   const before = app.store[KEY];
   app.state.failWrites = true;
-  create(app, "Unsaved task");
+  await create(app, "Unsaved task");
   assert.equal(app.store[KEY], before);
   assert.equal(app.run("tasks.length"), 1);
   assert.equal(app.run("draft.title"), "Unsaved task");
   assert.equal(app.element("taskDialog").open, true);
 });
 
-test("stale tabs cannot overwrite newer saved edits", () => {
+test("stale tabs cannot overwrite newer saved edits", async () => {
   const store = { [KEY]: JSON.stringify([fixture()]) };
   const first = start(store),
     stale = start(store);
-  create(first, "Newer edit");
+  await create(first, "Newer edit");
   const latest = store[KEY];
-  create(stale, "Stale edit");
+  await create(stale, "Stale edit");
   assert.equal(store[KEY], latest);
   assert.equal(stale.run("draft.title"), "Stale edit");
 });
 
-test("backup import preserves all fields, snapshots prior data, and validates before replacing", () => {
+test("backup import preserves all fields, snapshots prior data, and validates before replacing", async () => {
   const app = start({ [KEY]: JSON.stringify([fixture()]) });
   const restored = {
     ...fixture("restored"),
@@ -179,26 +196,145 @@ test("backup import preserves all fields, snapshots prior data, and validates be
     format: "taskline-backup-v1",
     workingTasks: [restored],
   });
-  assert.equal(app.run(`importBackupText(${JSON.stringify(backup)})`), true);
+  assert.equal(
+    await app.run(`importBackupText(${JSON.stringify(backup)})`),
+    true,
+  );
   assert.deepEqual(JSON.parse(app.store[KEY]), [restored]);
   assert.equal(JSON.parse(app.store["taskline.backups.v1"]).length, 1);
   const before = app.store[KEY];
-  assert.throws(() => app.run("importBackupText('{\"workingTasks\":[{}]}')"));
+  await assert.rejects(() =>
+    app.run("importBackupText('{\"workingTasks\":[{}]}')"),
+  );
   assert.equal(app.store[KEY], before);
   app.state.confirm = false;
-  assert.equal(app.run('importBackupText("[]")'), false);
+  assert.equal(await app.run('importBackupText("[]")'), false);
   assert.equal(app.store[KEY], before);
 });
 
-test("backup history remains bounded to 20 snapshots", () => {
+test("backup history remains bounded to 20 snapshots", async () => {
   const app = start({ [KEY]: JSON.stringify([fixture()]) });
-  app.run("for(let i=0;i<25;i++){tasks[0].notes=String(i);save();}");
+  await app.run(
+    "(async()=>{for(let i=0;i<25;i++){tasks[0].notes=String(i);await save();}})()",
+  );
   assert.equal(JSON.parse(app.store["taskline.backups.v1"]).length, 20);
 });
 
-test("user text is escaped before being inserted into the table", () => {
+test("user text is escaped before being inserted into the table", async () => {
   const app = start();
-  create(app, "<img src=x onerror=alert(1)>");
+  await create(app, "<img src=x onerror=alert(1)>");
   assert.ok(app.element("rows").innerHTML.includes("&lt;img"));
   assert.ok(!app.element("rows").innerHTML.includes("<img"));
+});
+
+function fakeCloudDatabase() {
+  const rows = new Map();
+  let online = true;
+  return {
+    offline() {
+      online = false;
+    },
+    client(owner) {
+      return {
+        auth: {
+          getUser: async () => ({
+            data: {
+              user: owner ? { id: owner, email: "person@example.com" } : null,
+            },
+          }),
+          onAuthStateChange() {},
+        },
+        channel() {
+          return {
+            on() {
+              return this;
+            },
+            subscribe() {
+              return this;
+            },
+          };
+        },
+        async removeChannel() {},
+        from() {
+          return {
+            select() {
+              return {
+                eq() {
+                  return {
+                    maybeSingle: async () => ({
+                      data: structuredClone(rows.get(owner) || null),
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        },
+        async rpc(name, args) {
+          if (!online) throw Error("Offline");
+          const previous = rows.get(owner) || { tasks: [], revision: 0 };
+          if (previous.revision !== args.expected_revision)
+            return { error: { code: "40001" } };
+          const revision = previous.revision + 1;
+          rows.set(owner, { tasks: structuredClone(args.new_tasks), revision });
+          return { data: revision };
+        },
+      };
+    },
+  };
+}
+
+test("cloud migration preserves the browser copy and syncs to a second session", async () => {
+  const db = fakeCloudDatabase();
+  const raw = JSON.stringify([fixture()]);
+  const first = start({ [KEY]: raw }, db.client("owner"));
+  await first.run("cloudReady");
+  assert.equal(first.element("migrateTasks").hidden, false);
+  await first.element("migrateTasks").onclick();
+  assert.equal(first.store[KEY], raw);
+  const second = start({}, db.client("owner"));
+  await second.run("cloudReady");
+  assert.equal(second.run("tasks[0].title"), "Example task");
+  await create(second, "Created on second computer");
+  await first.run("refreshCloud()");
+  assert.equal(first.run("tasks[0].title"), "Created on second computer");
+  const third = start({}, db.client("another-account"));
+  await third.run("cloudReady");
+  assert.equal(third.run("tasks.length"), 0);
+});
+
+test("incoming cloud changes do not replace an open draft; stale save preserves it", async () => {
+  const db = fakeCloudDatabase();
+  const first = start({}, db.client("owner"));
+  await first.run("cloudReady");
+  await create(first, "Initial task");
+  const second = start({}, db.client("owner"));
+  await second.run("cloudReady");
+  first.run("openEditor(tasks[0].id)");
+  first.element("taskTitle").value = "Unsaved draft";
+  await create(second, "Concurrent task");
+  await first.run("refreshCloud()");
+  assert.equal(first.run("tasks.length"), 1);
+  await first.element("taskForm").onsubmit({ preventDefault() {} });
+  assert.equal(first.element("taskDialog").open, true);
+  assert.equal(first.run("draft.title"), "Unsaved draft");
+  assert.equal(first.run("tasks.length"), 1);
+  first.run("closeEditor(true)");
+  await first.run("refreshCloud()");
+  assert.equal(first.run("tasks.length"), 2);
+});
+
+test("cloud sign-in is required and offline writes are not presented as synced", async () => {
+  const db = fakeCloudDatabase();
+  const signedOut = start({}, db.client(null));
+  await signedOut.run("cloudReady");
+  assert.equal(signedOut.element("newTask").disabled, true);
+  assert.equal(signedOut.element("importBackup").disabled, true);
+  const app = start({}, db.client("owner"));
+  await app.run("cloudReady");
+  db.offline();
+  await create(app, "Offline draft");
+  assert.equal(app.run("tasks.length"), 0);
+  assert.equal(app.run("draft.title"), "Offline draft");
+  assert.equal(app.element("syncStatus").textContent, "Not saved");
 });
