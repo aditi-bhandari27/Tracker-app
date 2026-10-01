@@ -18,7 +18,7 @@ function service() {
       if (name === "load_taskline_link")
         return { data: structuredClone(board) };
       if (args.expected_revision !== board.revision)
-        return { error: { code: "40001" } };
+        return { error: { code: "PT409" } };
       board = {
         tasks: structuredClone(args.new_tasks),
         revision: board.revision + 1,

@@ -46,7 +46,7 @@ begin
   perform pg_advisory_xact_lock(hashtextextended(account_id::text, 0));
   select * into current_board from public.taskline_boards where owner_id = account_id for update;
   if coalesce(current_board.revision, 0) is distinct from expected_revision then
-    raise exception 'Tasks changed on another computer' using errcode = '40001';
+    raise exception 'Tasks changed on another computer' using errcode = 'PT409';
   end if;
   if current_board.owner_id is not null then
     insert into public.taskline_history(owner_id, revision, tasks)

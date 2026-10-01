@@ -256,7 +256,7 @@ function fakeCloudDatabase() {
           if (name === "load_taskline_link")
             return { data: structuredClone(previous) };
           if (previous.revision !== args.expected_revision)
-            return { error: { code: "40001" } };
+            return { error: { code: "PT409" } };
           const revision = previous.revision + 1;
           rows.set(owner, { tasks: structuredClone(args.new_tasks), revision });
           return { data: revision };
