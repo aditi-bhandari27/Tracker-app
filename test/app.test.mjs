@@ -461,3 +461,87 @@ test("Teams clipboard denial keeps a copyable preview; empty lists are not copie
   assert.match(app.element("toast").textContent, /No tasks/);
   assert.equal(app.state.clipboard, null);
 });
+
+test("list moves preserve every field and persist in both directions", async () => {
+  const original = {
+    ...fixture(),
+    uiEta: "Merged",
+    backendEta: "5 October",
+    mlEta: "6 October",
+    jira: "https://example.com/CARE-1",
+    designs: "https://example.com/design",
+    notes: "Latest update\nBlocker",
+    issues: [{ id: "issue-1", title: "Open issue", status: "Open" }],
+    extra: { custom: true },
+  };
+  const app = start({ [KEY]: JSON.stringify([original]) });
+  const before = JSON.parse(app.run("JSON.stringify(tasks[0])"));
+  assert.equal(await app.run('moveTaskToList("sample-1")'), true);
+  assert.deepEqual(JSON.parse(app.run("JSON.stringify(tasks[0])")), {
+    ...before,
+    list: "Current",
+  });
+  const reloaded = start(app.store);
+  assert.equal(reloaded.run("tasks[0].list"), "Current");
+  await reloaded.run('moveTaskToList("sample-1")');
+  assert.deepEqual(
+    JSON.parse(reloaded.run("JSON.stringify(tasks[0])")),
+    before,
+  );
+});
+
+test("reordering persists visible order and leaves other lists, workspaces and search-hidden tasks untouched", async () => {
+  const items = [
+    { ...fixture("a"), title: "Match A" },
+    { ...fixture("other-list"), list: "Current" },
+    { ...fixture("b"), title: "Match B" },
+    { ...fixture("other-space"), workspace: "AI+ Studio" },
+    { ...fixture("hidden"), title: "Hidden result" },
+    { ...fixture("c"), title: "Match C" },
+  ];
+  const app = start({ [KEY]: JSON.stringify(items) });
+  app.run('query="Match"');
+  await app.run('reorderTask("a","c",true)');
+  assert.equal(
+    app.run('tasks.map(t=>t.id).join(",")'),
+    "b,other-list,c,other-space,hidden,a",
+  );
+  assert.equal(
+    start(app.store).run('tasks.map(t=>t.id).join(",")'),
+    "b,other-list,c,other-space,hidden,a",
+  );
+  await app.run('nudgeTask("a",-1)');
+  assert.equal(app.run('visibleTasks().map(t=>t.id).join(",")'), "b,a,c");
+  assert.equal(await app.run('reorderTask("a","other-space")'), false);
+  const after = JSON.parse(app.run("JSON.stringify(tasks)"));
+  for (const item of items)
+    assert.equal(after.find((t) => t.id === item.id).notes, item.notes);
+});
+
+test("failed or stale reorders and moves keep the last acknowledged board", async () => {
+  const db = fakeCloudDatabase(),
+    first = start({}, db.client("owner"));
+  await first.run("cloudReady");
+  await create(first, "One");
+  await create(first, "Two");
+  const stale = start({}, db.client("owner"));
+  await stale.run("cloudReady");
+  const before = stale.run("JSON.stringify(tasks)");
+  await first.run("moveTaskToList(tasks[0].id)");
+  assert.equal(
+    await stale.run("reorderTask(tasks[0].id,tasks[1].id,true)"),
+    false,
+  );
+  assert.equal(stale.run("JSON.stringify(tasks)"), before);
+  assert.equal(await stale.run("moveTaskToList(tasks[1].id)"), false);
+  assert.equal(stale.run("JSON.stringify(tasks)"), before);
+  await stale.run("refreshCloud()");
+  assert.equal(
+    stale.run("JSON.stringify(tasks)"),
+    first.run("JSON.stringify(tasks)"),
+  );
+  db.offline();
+  const last = stale.run("JSON.stringify(tasks)");
+  assert.equal(await stale.run("moveTaskToList(tasks[0].id)"), false);
+  assert.equal(stale.run("JSON.stringify(tasks)"), last);
+});

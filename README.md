@@ -48,6 +48,12 @@ Click the clipboard icon beside **New task**. It fetches the latest saved record
 
 The clipboard includes HTML for formatted Teams paste and a plain-text fallback. If clipboard access is unavailable, use **Copy message** or select the text in the preview. A cloud fetch failure does not copy stale data. This action never posts to Teams or changes saved tasks.
 
+## Order and move tasks
+
+Drag a task's grip to reorder it within the selected list. Drop on the upper or lower half of another row to place it before or after that task. Order is saved to the shared board and is also used for task navigation and Teams updates. With search active, only matching rows are reordered; hidden tasks and other lists/workspaces retain their positions.
+
+Use each row's **Actions → Move to Current / Move to Backlog** to change its list without changing its status, developers, ETAs, notes, links or issues. Actions also offers **Move up / Move down** for touch devices; keyboard users can focus the grip and press **Alt+Up / Alt+Down**. Failed or conflicting writes restore the prior list and order.
+
 ## Features
 
 - Independent workspace tabs, task counts, Current/Backlog lists, and search.
