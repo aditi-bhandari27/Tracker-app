@@ -24,6 +24,7 @@ const cloudEnabled = Boolean(
   cloudConfig.supabaseUrl && cloudConfig.supabasePublishableKey,
 );
 let generatingStandup = false;
+let draggedTaskId = null;
 let cloud = null,
   saving = false,
   loadingCloud = false,
@@ -323,7 +324,7 @@ function render() {
   $("rows").innerHTML = shown
     .map((t) => {
       const open = t.issues.filter((i) => i.status !== "Resolved").length;
-      return `<tr><td><div class="task-cell"><span class="task-mark ${statusClass(t.status)}" aria-hidden="true"></span><div class="task-copy"><div class="taskmeta">${esc(taskCode(t))}</div><button class="tasktitle" data-open="${esc(t.id)}">${esc(t.title)}</button><div class="tasknote" title="${esc(t.notes)}">${esc(t.notes || "No update yet")}</div></div></div></td><td><select ${canEdit() ? "" : "disabled"} class="status ${statusClass(t.status)}" data-status="${esc(t.id)}" aria-label="Status for ${esc(t.title)}">${options(STATUSES, t.status)}</select></td><td>${t.issueType ? `<span class="issue-type">${esc(t.issueType)}</span>` : '<span class="unassigned">Not set</span>'}</td><td>${person(t.ui, "ui")}</td><td>${person(t.backend, "be")}</td><td>${person(t.ml, "ml")}</td><td><div class="issues ${open ? "alert" : ""}"><span aria-hidden="true">${open ? "⊙" : "✓"}</span>${t.issues.length ? (open ? open + " open" : "All resolved") : "No issues"}</div>${t.issues.length ? `<div class="issue-track" aria-label="${t.issues.length - open} of ${t.issues.length} issues resolved">${t.issues.map((i) => `<span class="${i.status === "Resolved" ? "resolved" : ""}"></span>`).join("")}</div>` : ""}</td></tr>`;
+      return `<tr data-row-task="${esc(t.id)}"><td><div class="task-cell"><button type="button" class="drag-handle" draggable="${canEdit()}" data-drag-task="${esc(t.id)}" aria-label="Reorder ${esc(t.title)}" title="Drag to reorder. Or use Alt + Up/Down." ${canEdit() ? "" : "disabled"}>⠿</button><span class="task-mark ${statusClass(t.status)}" aria-hidden="true"></span><div class="task-copy"><div class="taskmeta">${esc(taskCode(t))}</div><button class="tasktitle" data-open="${esc(t.id)}">${esc(t.title)}</button><div class="tasknote" title="${esc(t.notes)}">${esc(t.notes || "No update yet")}</div></div></div></td><td><select ${canEdit() ? "" : "disabled"} class="status ${statusClass(t.status)}" data-status="${esc(t.id)}" aria-label="Status for ${esc(t.title)}">${options(STATUSES, t.status)}</select></td><td>${t.issueType ? `<span class="issue-type">${esc(t.issueType)}</span>` : '<span class="unassigned">Not set</span>'}</td><td>${person(t.ui, "ui")}</td><td>${person(t.backend, "be")}</td><td>${person(t.ml, "ml")}</td><td><div class="issues ${open ? "alert" : ""}"><span aria-hidden="true">${open ? "⊙" : "✓"}</span>${t.issues.length ? (open ? open + " open" : "All resolved") : "No issues"}</div>${t.issues.length ? `<div class="issue-track" aria-label="${t.issues.length - open} of ${t.issues.length} issues resolved">${t.issues.map((i) => `<span class="${i.status === "Resolved" ? "resolved" : ""}"></span>`).join("")}</div>` : ""}</td><td><select data-task-action="${esc(t.id)}" class="task-actions" aria-label="Actions for ${esc(t.title)}" ${canEdit() ? "" : "disabled"}><option value="">Actions</option><option value="move">Move to ${t.list === "Current" ? "Backlog" : "Current"}</option><option value="up">Move up</option><option value="down">Move down</option></select></td></tr>`;
     })
     .join("");
   $("results").textContent =
@@ -533,6 +534,15 @@ $("rows").onclick = (e) => {
 };
 $("rows").onchange = async (e) => {
   if (!canEdit()) return;
+  if (e.target.dataset.taskAction) {
+    const { taskAction: id } = e.target.dataset;
+    const action = e.target.value;
+    e.target.value = "";
+    if (action === "move") await moveTaskToList(id);
+    if (action === "up" || action === "down")
+      await nudgeTask(id, action === "up" ? -1 : 1);
+    return;
+  }
   if (e.target.dataset.status) {
     const id = e.target.dataset.status;
     const task = tasks.find((t) => t.id === id);
@@ -795,11 +805,12 @@ window.addEventListener("storage", (event) => {
 });
 
 async function refreshCloud() {
-  if (!cloud?.token || saving || draft || loadingCloud) return;
+  if (!cloud?.token || saving || draft || loadingCloud || draggedTaskId) return;
   loadingCloud = true;
   try {
     const board = await cloud.load();
-    if (saving || draft || board.revision < cloud.revision) return;
+    if (saving || draft || draggedTaskId || board.revision < cloud.revision)
+      return;
     const changed = !cloudLoaded || board.revision !== cloud.revision;
     if (changed) {
       tasks = parseBackup(JSON.stringify(board.tasks));
@@ -1115,3 +1126,119 @@ $("closeStandup").onclick = () => $("standupDialog").close();
 $("standupDialog").addEventListener("close", () =>
   $("generateStandup").focus(),
 );
+
+async function persistTaskArrangement(nextTasks, successMessage, focusId) {
+  if (!canEdit() || draft) return false;
+  const previous = tasks;
+  tasks = nextTasks;
+  const persisted = await save();
+  if (!persisted) tasks = previous;
+  render();
+  notify(
+    persisted
+      ? successMessage
+      : "Change not saved. The previous list and order were kept. Refresh before retrying.",
+  );
+  const handle = Array.from(
+    $("rows").querySelectorAll("[data-drag-task]"),
+  ).find((el) => el.dataset.dragTask === focusId);
+  (handle || $("newTask")).focus();
+  return persisted;
+}
+async function moveTaskToList(id) {
+  if (!canEdit() || draft) return false;
+  const task = tasks.find((item) => item.id === id);
+  if (!task) return false;
+  const destination = task.list === "Current" ? "Backlog" : "Current";
+  return persistTaskArrangement(
+    tasks.map((item) =>
+      item.id === id ? { ...item, list: destination } : item,
+    ),
+    `Task moved to ${destination}. All details retained.`,
+    id,
+  );
+}
+async function reorderTask(sourceId, targetId, after = false) {
+  if (!canEdit() || draft || sourceId === targetId) return false;
+  const shown = visibleTasks();
+  const source = shown.find((item) => item.id === sourceId);
+  const target = shown.find((item) => item.id === targetId);
+  if (!source || !target) return false;
+  const reordered = shown.filter((item) => item.id !== sourceId);
+  const index =
+    reordered.findIndex((item) => item.id === targetId) + (after ? 1 : 0);
+  reordered.splice(index, 0, source);
+  if (shown.every((item, i) => item.id === reordered[i].id)) return false;
+  // Reorder only visible slots: other lists, workspaces and search-hidden tasks stay put.
+  const ids = new Set(shown.map((item) => item.id));
+  let cursor = 0;
+  const next = tasks.map((item) =>
+    ids.has(item.id) ? reordered[cursor++] : item,
+  );
+  return persistTaskArrangement(next, "Task order saved.", sourceId);
+}
+async function nudgeTask(id, direction) {
+  const shown = visibleTasks();
+  const index = shown.findIndex((item) => item.id === id);
+  const target = index < 0 ? null : shown[index + direction];
+  if (!target) return false;
+  return reorderTask(id, target.id, direction > 0);
+}
+function clearDropIndicators() {
+  $("rows")
+    .querySelectorAll(".drop-before, .drop-after")
+    .forEach((row) => row.classList.remove("drop-before", "drop-after"));
+}
+$("rows").ondragstart = (event) => {
+  const handle = event.target.closest("[data-drag-task]");
+  if (!handle || !canEdit() || draft) {
+    event.preventDefault();
+    return;
+  }
+  draggedTaskId = handle.dataset.dragTask;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", draggedTaskId);
+  const row = handle.closest("[data-row-task]");
+  event.dataTransfer.setDragImage?.(row, 30, 20);
+  row.classList.add("dragging");
+};
+$("rows").ondragover = (event) => {
+  const row = event.target.closest("[data-row-task]");
+  if (!draggedTaskId || !row || !canEdit()) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  clearDropIndicators();
+  if (row.dataset.rowTask === draggedTaskId) return;
+  const bounds = row.getBoundingClientRect();
+  row.classList.add(
+    event.clientY > bounds.top + bounds.height / 2
+      ? "drop-after"
+      : "drop-before",
+  );
+};
+$("rows").ondrop = async (event) => {
+  const row = event.target.closest("[data-row-task]");
+  if (!draggedTaskId || !row) return;
+  event.preventDefault();
+  const source = draggedTaskId,
+    target = row.dataset.rowTask;
+  const bounds = row.getBoundingClientRect();
+  const after = event.clientY > bounds.top + bounds.height / 2;
+  draggedTaskId = null;
+  clearDropIndicators();
+  await reorderTask(source, target, after);
+};
+$("rows").ondragend = () => {
+  draggedTaskId = null;
+  clearDropIndicators();
+  $("rows")
+    .querySelectorAll(".dragging")
+    .forEach((row) => row.classList.remove("dragging"));
+};
+$("rows").onkeydown = async (event) => {
+  const handle = event.target.closest("[data-drag-task]");
+  if (!handle || !event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key))
+    return;
+  event.preventDefault();
+  await nudgeTask(handle.dataset.dragTask, event.key === "ArrowUp" ? -1 : 1);
+};
