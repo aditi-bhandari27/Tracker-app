@@ -324,7 +324,7 @@ function render() {
   $("rows").innerHTML = shown
     .map((t) => {
       const open = t.issues.filter((i) => i.status !== "Resolved").length;
-      return `<tr data-row-task="${esc(t.id)}"><td><div class="task-cell"><button type="button" class="drag-handle" draggable="${canEdit()}" data-drag-task="${esc(t.id)}" aria-label="Reorder ${esc(t.title)}" title="Drag to reorder. Or use Alt + Up/Down." ${canEdit() ? "" : "disabled"}>⠿</button><span class="task-mark ${statusClass(t.status)}" aria-hidden="true"></span><div class="task-copy"><div class="taskmeta">${esc(taskCode(t))}</div><button class="tasktitle" data-open="${esc(t.id)}">${esc(t.title)}</button><div class="tasknote" title="${esc(t.notes)}">${esc(t.notes || "No update yet")}</div></div></div></td><td><select ${canEdit() ? "" : "disabled"} class="status ${statusClass(t.status)}" data-status="${esc(t.id)}" aria-label="Status for ${esc(t.title)}">${options(STATUSES, t.status)}</select></td><td>${t.issueType ? `<span class="issue-type">${esc(t.issueType)}</span>` : '<span class="unassigned">Not set</span>'}</td><td>${person(t.ui, "ui")}</td><td>${person(t.backend, "be")}</td><td>${person(t.ml, "ml")}</td><td><div class="issues ${open ? "alert" : ""}"><span aria-hidden="true">${open ? "⊙" : "✓"}</span>${t.issues.length ? (open ? open + " open" : "All resolved") : "No issues"}</div>${t.issues.length ? `<div class="issue-track" aria-label="${t.issues.length - open} of ${t.issues.length} issues resolved">${t.issues.map((i) => `<span class="${i.status === "Resolved" ? "resolved" : ""}"></span>`).join("")}</div>` : ""}</td><td><select data-task-action="${esc(t.id)}" class="task-actions" aria-label="Actions for ${esc(t.title)}" ${canEdit() ? "" : "disabled"}><option value="">Actions</option><option value="move">Move to ${t.list === "Current" ? "Backlog" : "Current"}</option><option value="up">Move up</option><option value="down">Move down</option></select></td></tr>`;
+      return `<tr data-row-task="${esc(t.id)}"><td><div class="task-cell"><button type="button" class="drag-handle" draggable="false" data-drag-task="${esc(t.id)}" aria-label="Reorder ${esc(t.title)}" title="Drag to reorder. Or use Alt + Up/Down." ${canEdit() ? "" : "disabled"}>⠿</button><span class="task-mark ${statusClass(t.status)}" aria-hidden="true"></span><div class="task-copy"><div class="taskmeta">${esc(taskCode(t))}</div><button class="tasktitle" data-open="${esc(t.id)}">${esc(t.title)}</button><div class="tasknote" title="${esc(t.notes)}">${esc(t.notes || "No update yet")}</div></div></div></td><td><select ${canEdit() ? "" : "disabled"} class="status ${statusClass(t.status)}" data-status="${esc(t.id)}" aria-label="Status for ${esc(t.title)}">${options(STATUSES, t.status)}</select></td><td>${t.issueType ? `<span class="issue-type">${esc(t.issueType)}</span>` : '<span class="unassigned">Not set</span>'}</td><td>${person(t.ui, "ui")}</td><td>${person(t.backend, "be")}</td><td>${person(t.ml, "ml")}</td><td><div class="issues ${open ? "alert" : ""}"><span aria-hidden="true">${open ? "⊙" : "✓"}</span>${t.issues.length ? (open ? open + " open" : "All resolved") : "No issues"}</div>${t.issues.length ? `<div class="issue-track" aria-label="${t.issues.length - open} of ${t.issues.length} issues resolved">${t.issues.map((i) => `<span class="${i.status === "Resolved" ? "resolved" : ""}"></span>`).join("")}</div>` : ""}</td><td><select data-task-action="${esc(t.id)}" class="task-actions" aria-label="Actions for ${esc(t.title)}" ${canEdit() ? "" : "disabled"}><option value="">Actions</option><option value="move">Move to ${t.list === "Current" ? "Backlog" : "Current"}</option><option value="up">Move up</option><option value="down">Move down</option></select></td></tr>`;
     })
     .join("");
   $("results").textContent =
@@ -1189,52 +1189,68 @@ function clearDropIndicators() {
     .querySelectorAll(".drop-before, .drop-after")
     .forEach((row) => row.classList.remove("drop-before", "drop-after"));
 }
-$("rows").ondragstart = (event) => {
-  const handle = event.target.closest("[data-drag-task]");
-  if (!handle || !canEdit() || draft) {
-    event.preventDefault();
-    return;
-  }
-  draggedTaskId = handle.dataset.dragTask;
-  event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData("text/plain", draggedTaskId);
-  const row = handle.closest("[data-row-task]");
-  event.dataTransfer.setDragImage?.(row, 30, 20);
-  row.classList.add("dragging");
-};
-$("rows").ondragover = (event) => {
-  const row = event.target.closest("[data-row-task]");
-  if (!draggedTaskId || !row || !canEdit()) return;
-  event.preventDefault();
-  event.dataTransfer.dropEffect = "move";
-  clearDropIndicators();
-  if (row.dataset.rowTask === draggedTaskId) return;
-  const bounds = row.getBoundingClientRect();
-  row.classList.add(
-    event.clientY > bounds.top + bounds.height / 2
-      ? "drop-after"
-      : "drop-before",
-  );
-};
-$("rows").ondrop = async (event) => {
-  const row = event.target.closest("[data-row-task]");
-  if (!draggedTaskId || !row) return;
-  event.preventDefault();
-  const source = draggedTaskId,
-    target = row.dataset.rowTask;
-  const bounds = row.getBoundingClientRect();
-  const after = event.clientY > bounds.top + bounds.height / 2;
+let pointerDrag = null;
+function endPointerDrag() {
+  const current = pointerDrag;
+  pointerDrag = null;
   draggedTaskId = null;
-  clearDropIndicators();
-  await reorderTask(source, target, after);
-};
-$("rows").ondragend = () => {
-  draggedTaskId = null;
+  if (current?.handle.hasPointerCapture?.(current.pointerId))
+    current.handle.releasePointerCapture(current.pointerId);
   clearDropIndicators();
   $("rows")
     .querySelectorAll(".dragging")
     .forEach((row) => row.classList.remove("dragging"));
+  return current;
+}
+$("rows").ondragstart = (event) => event.preventDefault();
+$("rows").onpointerdown = (event) => {
+  const handle = event.target.closest("[data-drag-task]");
+  if (!handle || event.button !== 0 || !canEdit() || draft) return;
+  event.preventDefault();
+  draggedTaskId = handle.dataset.dragTask;
+  pointerDrag = {
+    handle,
+    pointerId: event.pointerId,
+    source: draggedTaskId,
+    startY: event.clientY,
+    active: false,
+    target: null,
+  };
+  handle.setPointerCapture(event.pointerId);
+  handle.focus();
 };
+$("rows").onpointermove = (event) => {
+  if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
+  if (!pointerDrag.active && Math.abs(event.clientY - pointerDrag.startY) < 5)
+    return;
+  pointerDrag.active = true;
+  pointerDrag.handle.closest("[data-row-task]").classList.add("dragging");
+  const row = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest("[data-row-task]");
+  clearDropIndicators();
+  pointerDrag.target = null;
+  if (
+    !row ||
+    row.dataset.rowTask === pointerDrag.source ||
+    !$("rows").contains(row)
+  )
+    return;
+  const bounds = row.getBoundingClientRect();
+  pointerDrag.target = row.dataset.rowTask;
+  pointerDrag.after = event.clientY > bounds.top + bounds.height / 2;
+  row.classList.add(pointerDrag.after ? "drop-after" : "drop-before");
+};
+$("rows").onpointerup = async (event) => {
+  if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
+  const drag = endPointerDrag();
+  if (drag.active && drag.target)
+    await reorderTask(drag.source, drag.target, drag.after);
+};
+$("rows").onpointercancel = () => endPointerDrag();
+$("rows").addEventListener("lostpointercapture", () => {
+  if (pointerDrag) endPointerDrag();
+});
 $("rows").onkeydown = async (event) => {
   const handle = event.target.closest("[data-drag-task]");
   if (!handle || !event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key))
