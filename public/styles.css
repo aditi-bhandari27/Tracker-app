@@ -1315,3 +1315,9 @@ th:nth-child(7) {
 th:nth-child(8) {
   width: 122px;
 }
+
+.drag-handle {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
